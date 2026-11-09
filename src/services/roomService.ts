@@ -17,6 +17,24 @@ const mockRooms = new Map<string, Room>();
 const mockRoomsByCode = new Map<string, string>();
 const mockIdeasByRoom = new Map<string, Idea[]>();
 const mockSwipes = new Map<string, Swipe>();
+const roomListeners = new Set<(roomId: string) => void>();
+
+export function subscribeToRoomUpdates(callback: (roomId: string) => void): () => void {
+  roomListeners.add(callback);
+  return () => {
+    roomListeners.delete(callback);
+  };
+}
+
+function notifyRoomUpdated(roomId: string) {
+  roomListeners.forEach((cb) => {
+    try {
+      cb(roomId);
+    } catch (err) {
+      console.warn('[RoomService] Listener error:', err);
+    }
+  });
+}
 
 /**
  * Reset mock stores for isolated unit and integration testing.
@@ -147,6 +165,13 @@ export async function getRoom(roomIdOrCode: string): Promise<Room | null> {
 }
 
 /**
+ * Retrieves a room by its 6-character room code.
+ */
+export async function getRoomByCode(code: string): Promise<Room | null> {
+  return getRoom(code);
+}
+
+/**
  * Retrieves all ideas in a room.
  */
 export async function getRoomIdeas(roomId: string): Promise<Idea[]> {
@@ -250,6 +275,7 @@ export async function syncGoogleDoc(
   }
 
   mockIdeasByRoom.set(roomId, merged);
+  notifyRoomUpdated(roomId);
   return parsedIdeas.length;
 }
 
@@ -278,6 +304,7 @@ export async function toggleIdeaStatus(
   if (target) {
     target.status = status;
     target.updatedAt = Date.now();
+    notifyRoomUpdated(roomId);
   }
 }
 
@@ -338,6 +365,7 @@ export async function recordSwipe(
     targetIdea.updatedAt = Date.now();
   }
 
+  notifyRoomUpdated(roomId);
   return swipe;
 }
 
