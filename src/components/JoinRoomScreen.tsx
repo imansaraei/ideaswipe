@@ -8,6 +8,7 @@ export interface JoinRoomScreenProps {
   initialCode?: string;
   autoJoin?: boolean;
   onCancel?: () => void;
+  onCreateRoom?: () => void;
   className?: string;
 }
 
@@ -61,6 +62,7 @@ export const JoinRoomScreen: React.FC<JoinRoomScreenProps> = ({
   initialCode = '',
   autoJoin = false,
   onCancel,
+  onCreateRoom,
   className = '',
 }) => {
   const [code, setCode] = useState<string>('');
@@ -230,6 +232,21 @@ export const JoinRoomScreen: React.FC<JoinRoomScreenProps> = ({
             >
               Cancel
             </button>
+          )}
+
+          {onCreateRoom && (
+            <div className="pt-4 border-t border-jade/10 text-center relative z-10">
+              <p className="text-xs text-mint/60 mb-2">Want to host your own idea session?</p>
+              <button
+                type="button"
+                onClick={onCreateRoom}
+                aria-label="Create New Room"
+                className="px-4 py-2 rounded-xl bg-well hover:bg-well/80 border border-jade/30 hover:border-jade text-xs font-semibold text-jade transition-colors inline-flex items-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Create a New Room</span>
+              </button>
+            </div>
           )}
         </form>
       </div>

@@ -8,6 +8,8 @@ import {
   getRoomIdeas,
   syncGoogleDoc,
   toggleIdeaStatus,
+  recordSwipe,
+  shuffleRoom,
   resetMockRoomStoreForTesting,
   GOOGLE_DOC_MARKDOWN_TEMPLATE,
 } from '../src/services/roomService';
@@ -378,5 +380,197 @@ describe('HostDashboard Component', () => {
     fireEvent.click(restoreBtn);
 
     expect(handleToggle).toHaveBeenCalledWith('i-003', 'pot');
+  });
+
+  it('renders Shuffle button and triggers shuffleRoom with toast feedback', async () => {
+    const room = await createRoom('host_owner', 'Shuffle Host Test Room', 2);
+    const docSample = `
+### ★ I-001 First Idea
+- Status: pot
+- Idea: First description.
+
+### ★ I-002 Second Idea
+- Status: pot
+- Idea: Second description.
+    `.trim();
+
+    await syncGoogleDoc(room.id, 'doc1', docSample);
+
+    render(
+      React.createElement(HostDashboard, {
+        room,
+        onRoomUpdated: vi.fn(),
+      })
+    );
+
+    const shuffleBtn = screen.getByRole('button', { name: /shuffle pot \/ start round/i });
+    expect(shuffleBtn).toBeDefined();
+
+    fireEvent.click(shuffleBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toBeDefined();
+      expect(screen.getByText(/round started/i)).toBeDefined();
+    });
+  });
+});
+
+describe('Vote Preservation in syncGoogleDoc', () => {
+  beforeEach(() => {
+    resetMockRoomStoreForTesting();
+    vi.restoreAllMocks();
+  });
+
+  it('preserves likesCount, passesCount, and score when doc is re-synced', async () => {
+    const room = await createRoom('host_1', 'Vote Preservation Room');
+    const doc1 = `
+### ★ I-001 VR Workspace
+- Status: pot
+- Idea: Virtual reality collaboration space.
+    `.trim();
+
+    await syncGoogleDoc(room.id, 'doc1', doc1);
+    const ideasBefore = await getRoomIdeas(room.id);
+    const ideaId = ideasBefore[0].id;
+
+    // Record some votes
+    await recordSwipe(room.id, 'user_1', ideaId, 'like');
+    await recordSwipe(room.id, 'user_2', ideaId, 'pass');
+
+    const ideasAfterVote = await getRoomIdeas(room.id);
+    expect(ideasAfterVote[0].likesCount).toBe(1);
+    expect(ideasAfterVote[0].passesCount).toBe(1);
+    expect(ideasAfterVote[0].score).toBe(0.5);
+
+    // Re-sync with updated description
+    const doc2 = `
+### ★ I-001 VR Workspace
+- Status: pot
+- Idea: Virtual reality collaboration space with spatial audio and avatars.
+    `.trim();
+
+    await syncGoogleDoc(room.id, 'doc1', doc2);
+    const ideasAfterResync = await getRoomIdeas(room.id);
+
+    expect(ideasAfterResync[0].oneLiner).toBe(
+      'Virtual reality collaboration space with spatial audio and avatars.'
+    );
+    // Votes and score are preserved!
+    expect(ideasAfterResync[0].likesCount).toBe(1);
+    expect(ideasAfterResync[0].passesCount).toBe(1);
+    expect(ideasAfterResync[0].score).toBe(0.5);
+  });
+
+  it('sets status to archived when doc explicitly specifies - Status: dropped', async () => {
+    const room = await createRoom('host_1', 'Drop Status Room');
+    const doc1 = `
+### ★ I-001 Active Project
+- Status: pot
+- Idea: Some cool project.
+    `.trim();
+
+    await syncGoogleDoc(room.id, 'doc1', doc1);
+    const ideas = await getRoomIdeas(room.id);
+    expect(ideas[0].status).toBe('pot');
+
+    // Re-sync with dropped status
+    const doc2 = `
+### ★ I-001 Active Project
+- Status: dropped
+- Idea: Some cool project.
+    `.trim();
+
+    await syncGoogleDoc(room.id, 'doc1', doc2);
+    const ideasAfter = await getRoomIdeas(room.id);
+    expect(ideasAfter[0].status).toBe('archived');
+  });
+});
+
+describe('Double-Vote Prevention in recordSwipe', () => {
+  beforeEach(() => {
+    resetMockRoomStoreForTesting();
+    vi.restoreAllMocks();
+  });
+
+  it('does not increment likesCount or passesCount if user already swiped on the idea', async () => {
+    const room = await createRoom('host_1', 'Double Vote Room');
+    const doc = `
+### ★ I-001 Drone Delivery
+- Status: pot
+- Idea: Drone delivery for medicine.
+    `.trim();
+
+    await syncGoogleDoc(room.id, 'doc1', doc);
+    const ideas = await getRoomIdeas(room.id);
+    expect(ideas).toHaveLength(1);
+    const ideaId = ideas[0].id;
+
+    // First swipe
+    const swipe1 = await recordSwipe(room.id, 'voter_A', ideaId, 'like');
+    expect(swipe1).toBeDefined();
+
+    let currentIdeas = await getRoomIdeas(room.id);
+    expect(currentIdeas[0].likesCount).toBe(1);
+    expect(currentIdeas[0].passesCount).toBe(0);
+
+    // Duplicate swipe by voter_A
+    const swipe2 = await recordSwipe(room.id, 'voter_A', ideaId, 'like');
+    expect(swipe2.id).toBe(swipe1.id);
+
+    currentIdeas = await getRoomIdeas(room.id);
+    expect(currentIdeas[0].likesCount).toBe(1); // Not incremented!
+    expect(currentIdeas[0].passesCount).toBe(0);
+  });
+});
+
+describe('shuffleRoom Service', () => {
+  beforeEach(() => {
+    resetMockRoomStoreForTesting();
+    vi.restoreAllMocks();
+  });
+
+  it('promotes winning challengers, dethrones lower champions, and selects next challengers', async () => {
+    const room = await createRoom('host_1', 'KOTH Shuffle Arena', 2);
+    const doc = `
+### ★ I-001 Champ Idea
+- Status: pot
+- Idea: Idea 1.
+
+### ★ I-002 Challenger Idea
+- Status: pot
+- Idea: Idea 2.
+
+### ★ I-003 Waiting Idea
+- Status: pot
+- Idea: Idea 3.
+    `.trim();
+
+    await syncGoogleDoc(room.id, 'doc1', doc);
+    const ideas = await getRoomIdeas(room.id);
+    expect(ideas).toHaveLength(3);
+
+    // First shuffle: picks first 2 challengers
+    const shuffle1 = await shuffleRoom(room.id);
+    expect(shuffle1.nextChallengers).toHaveLength(2);
+    expect(shuffle1.activeIdeaIds).toEqual(['i-001', 'i-002']);
+
+    const updatedRoom1 = await getRoom(room.id);
+    expect(updatedRoom1?.activeIdeaIds).toEqual(['i-001', 'i-002']);
+    expect(updatedRoom1?.lastShuffledAt).toBeGreaterThan(0);
+
+    // Cast votes: I-001 gets 100% likes, I-002 gets 0% likes
+    await recordSwipe(room.id, 'user_1', 'i-001', 'like');
+    await recordSwipe(room.id, 'user_1', 'i-002', 'pass');
+
+    // Second shuffle: evaluates I-001 and I-002, I-001 becomes champ, I-002 goes back to pot
+    const shuffle2 = await shuffleRoom(room.id);
+    expect(shuffle2.champions.map((c) => c.id)).toContain('i-001');
+
+    const ideasAfterShuffle = await getRoomIdeas(room.id);
+    const champ = ideasAfterShuffle.find((i) => i.id === 'i-001');
+    expect(champ?.status).toBe('active');
+
+    // Next challengers picked from available pot (I-003 and I-002)
+    expect(shuffle2.nextChallengers.length).toBeGreaterThan(0);
   });
 });

@@ -1,7 +1,9 @@
 import * as admin from 'firebase-admin';
-import { evaluateKingOfTheHill } from '../../src/lib/leaderboard';
+import { evaluateKingOfTheHill, pickNextChallengers } from '../../src/lib/leaderboard';
 import { Idea, Room, RoomSchedule } from '../../src/types';
 import { sendBatchNotification, BatchNotificationResult } from './notifications';
+
+export { pickNextChallengers };
 
 export interface ShuffleResult {
   roomId: string;
@@ -10,35 +12,6 @@ export interface ShuffleResult {
   nextChallengers: Idea[];
   activeIdeaIds: string[];
   notifications: BatchNotificationResult;
-}
-
-/**
- * Selects the next N challenger ideas from the room's pot.
- * Prioritizes unvoted ideas over previously voted/dethroned ideas.
- * If fewer than N ideas remain in the pot, returns all available pot ideas
- * safely without throwing or looping.
- */
-export function pickNextChallengers(
-  potIdeas: Idea[] | null | undefined,
-  count: number
-): Idea[] {
-  if (!potIdeas || !Array.isArray(potIdeas) || count <= 0) {
-    return [];
-  }
-
-  const pot = potIdeas.filter(
-    (idea) => idea && (idea.status === 'pot' || !idea.status)
-  );
-
-  const unvoted = pot.filter(
-    (idea) => ((idea.likesCount || 0) + (idea.passesCount || 0)) === 0
-  );
-  const voted = pot.filter(
-    (idea) => ((idea.likesCount || 0) + (idea.passesCount || 0)) > 0
-  );
-
-  const ordered = [...unvoted, ...voted];
-  return ordered.slice(0, count);
 }
 
 /**

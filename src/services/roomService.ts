@@ -1,6 +1,7 @@
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, increment, writeBatch } from 'firebase/firestore';
 import { Room, Idea, RoomSchedule, GoogleDocConfig, Swipe } from '../types';
 import { parseIdeasFromDoc } from '../lib/parser';
+import { evaluateKingOfTheHill, pickNextChallengers } from '../lib/leaderboard';
 import { generateRoomCode } from './auth';
 import { db, isFirebaseConfigured } from './firebase';
 
@@ -231,9 +232,30 @@ export async function syncGoogleDoc(
       const roomRef = doc(db, 'rooms', roomId);
       await updateDoc(roomRef, { googleDoc: googleDocConfig });
 
+      const ideasCol = collection(db, 'rooms', roomId, 'ideas');
+      const existingSnap = await getDocs(ideasCol);
+      const existingMap = new Map<string, Idea>();
+      existingSnap.docs.forEach((d) => {
+        const data = d.data() as Idea;
+        existingMap.set(data.id, data);
+        if (data.code) {
+          existingMap.set(data.code.toUpperCase(), data);
+        }
+      });
+
       for (const idea of parsedIdeas) {
-        const ideaRef = doc(db, 'rooms', roomId, 'ideas', idea.id);
-        await setDoc(ideaRef, idea, { merge: true });
+        const prev = existingMap.get(idea.id) || (idea.code ? existingMap.get(idea.code.toUpperCase()) : undefined);
+        const mergedIdea: Idea = prev
+          ? {
+              ...idea,
+              likesCount: prev.likesCount ?? 0,
+              passesCount: prev.passesCount ?? 0,
+              score: prev.score ?? 0,
+              status: idea.status === 'archived' ? 'archived' : prev.status,
+            }
+          : idea;
+        const ideaRef = doc(db, 'rooms', roomId, 'ideas', mergedIdea.id);
+        await setDoc(ideaRef, mergedIdea, { merge: true });
       }
 
       return parsedIdeas.length;
@@ -248,16 +270,22 @@ export async function syncGoogleDoc(
     room.googleDoc = googleDocConfig;
   }
 
-  // Merge ideas: keep existing score/likes/passes if idea code already exists
+  // Merge ideas: keep existing score/likes/passes if idea code or id already exists
   const existing = mockIdeasByRoom.get(roomId) || [];
-  const existingMap = new Map(existing.map((i) => [i.code.toUpperCase(), i]));
+  const existingMap = new Map<string, Idea>();
+  existing.forEach((i) => {
+    existingMap.set(i.id, i);
+    if (i.code) {
+      existingMap.set(i.code.toUpperCase(), i);
+    }
+  });
 
   const merged = parsedIdeas.map((newIdea) => {
-    const prev = existingMap.get(newIdea.code.toUpperCase());
+    const prev = existingMap.get(newIdea.id) || (newIdea.code ? existingMap.get(newIdea.code.toUpperCase()) : undefined);
     if (prev) {
       return {
         ...newIdea,
-        status: prev.status, // preserve curation status if previously toggled
+        status: newIdea.status === 'archived' ? 'archived' : prev.status, // preserve curation status unless doc explicitly dropped
         likesCount: prev.likesCount,
         passesCount: prev.passesCount,
         score: prev.score,
@@ -268,8 +296,9 @@ export async function syncGoogleDoc(
 
   // Retain any existing ideas that weren't in the incoming doc
   const incomingCodes = new Set(parsedIdeas.map((i) => i.code.toUpperCase()));
+  const incomingIds = new Set(parsedIdeas.map((i) => i.id));
   for (const prev of existing) {
-    if (!incomingCodes.has(prev.code.toUpperCase())) {
+    if (!incomingCodes.has(prev.code.toUpperCase()) && !incomingIds.has(prev.id)) {
       merged.push(prev);
     }
   }
@@ -334,6 +363,12 @@ export async function recordSwipe(
   if (isFirebaseConfigured && db) {
     try {
       const swipeRef = doc(db, 'rooms', roomId, 'swipes', swipeId);
+      const existingSnap = await getDoc(swipeRef);
+      if (existingSnap.exists()) {
+        // Double-vote prevention: do not increment vote counters if already swiped
+        return existingSnap.data() as Swipe;
+      }
+
       const ideaRef = doc(db, 'rooms', roomId, 'ideas', ideaId);
 
       const batch = writeBatch(db);
@@ -350,7 +385,13 @@ export async function recordSwipe(
   }
 
   // Offline / Mock fallback
-  mockSwipes.set(`${roomId}_${swipeId}`, swipe);
+  const mockKey = `${roomId}_${swipeId}`;
+  if (mockSwipes.has(mockKey)) {
+    // Double-vote prevention: do not increment vote counters if already swiped
+    return mockSwipes.get(mockKey)!;
+  }
+
+  mockSwipes.set(mockKey, swipe);
 
   const roomIdeas = mockIdeasByRoom.get(roomId) || [];
   const targetIdea = roomIdeas.find((i) => i.id === ideaId);
@@ -397,3 +438,134 @@ export async function getRoomSwipes(roomId: string, userId?: string): Promise<Sw
   }
   return results;
 }
+
+export interface RoomShuffleResult {
+  champions: Idea[];
+  backToPot: Idea[];
+  nextChallengers: Idea[];
+  activeIdeaIds: string[];
+}
+
+/**
+ * Manually shuffles ideas for a room:
+ * Evaluates current active challengers against champions via King of the Hill,
+ * updates champions/pot, picks next N ideas from pot into activeIdeaIds,
+ * and updates lastShuffledAt. Supports both Firestore and mock store.
+ */
+export async function shuffleRoom(roomId: string): Promise<RoomShuffleResult> {
+  if (!roomId) {
+    throw new Error('roomId is required to shuffle room');
+  }
+
+  const room = await getRoom(roomId);
+  if (!room) {
+    throw new Error(`Room not found: ${roomId}`);
+  }
+
+  const limit = room.leaderboardLimit && room.leaderboardLimit > 0 ? room.leaderboardLimit : 3;
+  const currentActiveIds = new Set(room.activeIdeaIds || []);
+
+  const allIdeas = await getRoomIdeas(roomId);
+
+  const currentChampions: Idea[] = [];
+  const currentChallengers: Idea[] = [];
+  const potIdeas: Idea[] = [];
+
+  for (const idea of allIdeas) {
+    if (idea.status === 'archived') {
+      continue;
+    }
+    if (currentActiveIds.has(idea.id)) {
+      currentChallengers.push(idea);
+    } else if (idea.status === 'active') {
+      currentChampions.push(idea);
+    } else {
+      potIdeas.push(idea);
+    }
+  }
+
+  const { champions, backToPot } = evaluateKingOfTheHill(currentChampions, currentChallengers, limit);
+
+  const championIds = new Set(champions.map((c) => c.id));
+  const availablePot = [...potIdeas, ...backToPot].filter(
+    (idea) => !championIds.has(idea.id) && idea.status !== 'archived'
+  );
+
+  const nextChallengers = pickNextChallengers(availablePot, limit);
+  const nextActiveIds = nextChallengers.map((c) => c.id);
+  const now = Date.now();
+
+  if (isFirebaseConfigured && db) {
+    try {
+      const roomRef = doc(db, 'rooms', roomId);
+      const batch = writeBatch(db);
+
+      for (const champ of champions) {
+        const champRef = doc(db, 'rooms', roomId, 'ideas', champ.id);
+        batch.update(champRef, {
+          status: 'active',
+          score: champ.score,
+          updatedAt: now,
+        });
+      }
+
+      for (const dethroned of backToPot) {
+        const dethronedRef = doc(db, 'rooms', roomId, 'ideas', dethroned.id);
+        batch.update(dethronedRef, {
+          status: 'pot',
+          score: dethroned.score,
+          updatedAt: now,
+        });
+      }
+
+      batch.update(roomRef, {
+        activeIdeaIds: nextActiveIds,
+        lastShuffledAt: now,
+      });
+
+      await batch.commit();
+
+      return {
+        champions,
+        backToPot,
+        nextChallengers,
+        activeIdeaIds: nextActiveIds,
+      };
+    } catch (err) {
+      console.warn('[RoomService] Firebase shuffleRoom failed, falling back to mock store:', err);
+    }
+  }
+
+  // Mock store fallback
+  const mockRoom = mockRooms.get(roomId);
+  if (mockRoom) {
+    mockRoom.activeIdeaIds = nextActiveIds;
+    mockRoom.lastShuffledAt = now;
+  }
+
+  const mockIdeas = mockIdeasByRoom.get(roomId) || [];
+  const champMap = new Map(champions.map((c) => [c.id, c]));
+  const backToPotMap = new Map(backToPot.map((d) => [d.id, d]));
+
+  for (const idea of mockIdeas) {
+    if (champMap.has(idea.id)) {
+      idea.status = 'active';
+      idea.score = champMap.get(idea.id)!.score;
+      idea.updatedAt = now;
+    } else if (backToPotMap.has(idea.id)) {
+      idea.status = 'pot';
+      idea.score = backToPotMap.get(idea.id)!.score;
+      idea.updatedAt = now;
+    }
+  }
+
+  notifyRoomUpdated(roomId);
+
+  return {
+    champions,
+    backToPot,
+    nextChallengers,
+    activeIdeaIds: nextActiveIds,
+  };
+}
+

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Idea } from '../types';
 import { SwipeDirection } from '../hooks/useSwipeGesture';
 import { SwipeCard } from './SwipeCard';
@@ -9,6 +9,7 @@ export { recordSwipe };
 
 export interface SwipeDeckProps {
   ideas: Idea[];
+  swipedIdeaIds?: Set<string> | string[];
   onSwipe?: (ideaId: string, direction: SwipeDirection) => void | Promise<void>;
   onFinish?: () => void;
   roomId?: string;
@@ -23,6 +24,7 @@ export interface SwipeDeckProps {
  */
 export const SwipeDeck: React.FC<SwipeDeckProps> = ({
   ideas = [],
+  swipedIdeaIds,
   onSwipe,
   onFinish,
   roomId,
@@ -31,9 +33,23 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  const totalCards = ideas.length;
-  const isFinished = totalCards > 0 && currentIndex >= totalCards;
-  const isEmpty = totalCards === 0;
+  const swipedSet = useMemo(() => {
+    if (!swipedIdeaIds) return null;
+    return swipedIdeaIds instanceof Set ? swipedIdeaIds : new Set(swipedIdeaIds);
+  }, [swipedIdeaIds]);
+
+  const effectiveIdeas = useMemo(() => {
+    if (!swipedSet || swipedSet.size === 0) return ideas;
+    return ideas.filter((idea) => !swipedSet.has(idea.id));
+  }, [ideas, swipedSet]);
+
+  const isRoundAlreadyCompleted =
+    ideas.length > 0 && swipedSet !== null && effectiveIdeas.length === 0;
+
+  const totalCards = effectiveIdeas.length;
+  const isFinished =
+    (totalCards > 0 && currentIndex >= totalCards) || isRoundAlreadyCompleted;
+  const isEmpty = totalCards === 0 && !isRoundAlreadyCompleted;
 
   const handleCardSwipe = useCallback(
     (ideaId: string, direction: SwipeDirection) => {
@@ -99,7 +115,7 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
           You're All Caught Up!
         </h3>
         <p className="text-sm text-mint/80 mb-6 leading-relaxed max-w-xs">
-          You voted on all <span className="font-mono-tabular font-bold text-mint-ivory">{totalCards}</span> ideas in this round. See how they stack up on the King of the Hill leaderboard!
+          You voted on all <span className="font-mono-tabular font-bold text-mint-ivory">{ideas.length}</span> ideas in this round. See how they stack up on the King of the Hill leaderboard!
         </p>
 
         {onFinish && (
@@ -118,7 +134,7 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
   }
 
   // Active stack slice: show top card plus up to 2 background preview cards
-  const visibleCards = ideas.slice(currentIndex, currentIndex + 3);
+  const visibleCards = effectiveIdeas.slice(currentIndex, currentIndex + 3);
   const currentCardNumber = currentIndex + 1;
   const progressPercent = Math.min(100, Math.round((currentIndex / totalCards) * 100));
 

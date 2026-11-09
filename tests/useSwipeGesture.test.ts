@@ -478,4 +478,68 @@ describe('recordSwipe Helper (Offline / Mock Fallback)', () => {
       expect(swipes[0].vote).toBe('like');
     }, { timeout: 3000 });
   });
+
+  it('SwipeDeck filters out already swiped cards when swipedIdeaIds is provided', () => {
+    const ideas: Idea[] = [
+      {
+        id: 'idea_1',
+        code: 'I-001',
+        title: 'First Idea',
+        oneLiner: 'One',
+        category: 'Tech',
+        status: 'active',
+        likesCount: 1,
+        passesCount: 0,
+        score: 1,
+      },
+      {
+        id: 'idea_2',
+        code: 'I-002',
+        title: 'Second Idea',
+        oneLiner: 'Two',
+        category: 'Tech',
+        status: 'active',
+        likesCount: 0,
+        passesCount: 0,
+        score: 0,
+      },
+    ];
+
+    render(
+      React.createElement(SwipeDeck, {
+        ideas,
+        swipedIdeaIds: ['idea_1'],
+      })
+    );
+
+    // Idea 1 is skipped, Idea 2 is visible
+    expect(screen.getByText('Second Idea')).toBeDefined();
+    expect(screen.getByTestId('swipe-counter-badge').textContent).toContain('Card1of1');
+  });
+
+  it('SwipeDeck renders round completion screen immediately if user already swiped all ideas', () => {
+    const ideas: Idea[] = [
+      {
+        id: 'idea_1',
+        code: 'I-001',
+        title: 'First Idea',
+        oneLiner: 'One',
+        category: 'Tech',
+        status: 'active',
+        likesCount: 1,
+        passesCount: 0,
+        score: 1,
+      },
+    ];
+
+    render(
+      React.createElement(SwipeDeck, {
+        ideas,
+        swipedIdeaIds: ['idea_1'],
+      })
+    );
+
+    expect(screen.getByTestId('swipe-deck-completion')).toBeDefined();
+    expect(screen.getByText("You're All Caught Up!")).toBeDefined();
+  });
 });

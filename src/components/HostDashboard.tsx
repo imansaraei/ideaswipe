@@ -9,9 +9,11 @@ import {
   Shield,
   FileText,
   Sparkles,
+  Shuffle,
+  Loader2,
 } from 'lucide-react';
 import { Room, Idea } from '../types';
-import { getRoomIdeas, toggleIdeaStatus } from '../services/roomService';
+import { getRoomIdeas, toggleIdeaStatus, shuffleRoom, getRoom } from '../services/roomService';
 import { GoogleDocImportModal } from './GoogleDocImportModal';
 
 export interface HostDashboardProps {
@@ -27,11 +29,14 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
   initialIdeas,
   onToggleStatus,
   onOpenDocSync,
+  onRoomUpdated,
 }) => {
   const [ideas, setIdeas] = useState<Idea[]>(initialIdeas || []);
   const [activeTab, setActiveTab] = useState<'pot' | 'active' | 'archived'>('pot');
   const [copiedCode, setCopiedCode] = useState(false);
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
+  const [isShuffling, setIsShuffling] = useState(false);
+  const [toastFeedback, setToastFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
     if (initialIdeas) {
@@ -73,6 +78,33 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
     setIdeas((prev) =>
       prev.map((idea) => (idea.id === ideaId ? { ...idea, status: newStatus } : idea))
     );
+  };
+
+  const handleShuffle = async () => {
+    setIsShuffling(true);
+    setToastFeedback(null);
+    try {
+      const result = await shuffleRoom(room.id);
+      await loadIdeas();
+      if (onRoomUpdated) {
+        const updated = await getRoom(room.id);
+        if (updated) onRoomUpdated(updated);
+      }
+      setToastFeedback({
+        message: `Round started! Promoted ${result.champions.length} champion${result.champions.length === 1 ? '' : 's'} and selected ${result.nextChallengers.length} challenger${result.nextChallengers.length === 1 ? '' : 's'}.`,
+        type: 'success',
+      });
+      setTimeout(() => setToastFeedback(null), 4000);
+    } catch (err: any) {
+      console.error('[HostDashboard] Shuffle failed:', err);
+      setToastFeedback({
+        message: err?.message || 'Failed to shuffle room ideas',
+        type: 'error',
+      });
+      setTimeout(() => setToastFeedback(null), 4000);
+    } finally {
+      setIsShuffling(false);
+    }
   };
 
   const potIdeas = ideas.filter((i) => i.status === 'pot');
@@ -123,6 +155,23 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
             </button>
           </div>
 
+          {/* Shuffle Button */}
+          <button
+            onClick={handleShuffle}
+            disabled={isShuffling}
+            aria-label="Shuffle Pot / Start Round"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card hover:bg-well border border-jade/40 hover:border-jade text-mint-ivory hover:text-jade font-semibold transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isShuffling ? (
+              <Loader2 className="w-4 h-4 text-jade animate-spin" />
+            ) : (
+              <Shuffle className="w-4 h-4 text-jade" />
+            )}
+            <span className="text-sm">
+              {isShuffling ? 'Shuffling...' : 'Shuffle Pot / Start Round'}
+            </span>
+          </button>
+
           {/* Sync Button */}
           <button
             onClick={() => (onOpenDocSync ? onOpenDocSync() : setIsDocModalOpen(true))}
@@ -133,6 +182,28 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Toast Feedback */}
+      {toastFeedback && (
+        <div
+          role="status"
+          className={`p-3 rounded-xl border text-xs font-medium flex items-center justify-between gap-2 shadow-lg animate-fadeIn ${
+            toastFeedback.type === 'success'
+              ? 'bg-jade/10 border-jade/40 text-jade'
+              : 'bg-rose/10 border-rose/40 text-rose'
+          }`}
+        >
+          <span>{toastFeedback.message}</span>
+          <button
+            type="button"
+            onClick={() => setToastFeedback(null)}
+            className="p-1 hover:opacity-75 text-sm"
+            aria-label="Close message"
+          >
+            &times;
+          </button>
+        </div>
+      )}
 
       {/* Stats Summary Tabs */}
       <div

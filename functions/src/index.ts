@@ -4,7 +4,7 @@ import { onRequest } from 'firebase-functions/v2/https';
 import { executeRoomShuffle, isRoomDueForShuffle, pickNextChallengers, ShuffleResult } from './shuffle';
 import { sendBatchNotification } from './notifications';
 import { parseIdeasFromDoc } from '../../src/lib/parser';
-import { Room } from '../../src/types';
+import { Room, Idea } from '../../src/types';
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -98,10 +98,31 @@ export const apiSyncDoc = onRequest({ cors: true }, async (req, res) => {
     const firestore = admin.firestore();
     const roomRef = firestore.collection('rooms').doc(roomId);
 
+    // Query existing ideas to preserve vote counts and status
+    const existingSnap = await roomRef.collection('ideas').get();
+    const existingMap = new Map<string, any>();
+    existingSnap.docs.forEach((docSnap) => {
+      const data = docSnap.data();
+      existingMap.set(docSnap.id, data);
+      if (data?.code) {
+        existingMap.set(String(data.code).toUpperCase(), data);
+      }
+    });
+
     const batch = firestore.batch();
     for (const idea of ideas) {
-      const ideaRef = roomRef.collection('ideas').doc(idea.id);
-      batch.set(ideaRef, idea, { merge: true });
+      const prev = existingMap.get(idea.id) || (idea.code ? existingMap.get(idea.code.toUpperCase()) : undefined);
+      const mergedIdea: Idea = prev
+        ? {
+            ...idea,
+            likesCount: prev.likesCount ?? 0,
+            passesCount: prev.passesCount ?? 0,
+            score: prev.score ?? 0,
+            status: idea.status === 'archived' ? 'archived' : (prev.status || 'pot'),
+          }
+        : idea;
+      const ideaRef = roomRef.collection('ideas').doc(mergedIdea.id);
+      batch.set(ideaRef, mergedIdea, { merge: true });
     }
 
     batch.update(roomRef, {

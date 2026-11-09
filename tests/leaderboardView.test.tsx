@@ -9,6 +9,7 @@ import { useRoomData } from '../src/hooks/useRoomData';
 import {
   createRoom,
   syncGoogleDoc,
+  recordSwipe,
   resetMockRoomStoreForTesting,
   getRoomByCode,
 } from '../src/services/roomService';
@@ -325,6 +326,66 @@ describe('useRoomData Hook', () => {
       expect(result.current.room).toBeDefined();
       expect(result.current.ideas).toHaveLength(2);
       expect(result.current.champions).toBeDefined();
+    });
+  });
+
+  it('strictly limits activeBatch to challenger ideas in activeIdeaIds and excludes non-challenger champions', async () => {
+    const room = await createRoom('host_1', 'Strict Batch Room', 2);
+    const docSample = `
+### ★ I-001 Champion
+- Status: pot
+- Idea: Champion idea.
+
+### ★ I-002 Challenger
+- Status: pot
+- Idea: Challenger idea.
+
+### ★ I-003 Waiting Pot
+- Status: pot
+- Idea: Waiting idea.
+    `.trim();
+
+    await syncGoogleDoc(room.id, 'doc1', docSample);
+
+    // Set room activeIdeaIds explicitly to only I-002
+    room.activeIdeaIds = ['i-002'];
+
+    const { result } = renderHook(() => useRoomData(room.id, 2));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      // activeBatch must contain ONLY the idea in activeIdeaIds (i-002)
+      expect(result.current.activeBatch).toHaveLength(1);
+      expect(result.current.activeBatch[0].id).toBe('i-002');
+    });
+  });
+
+  it('tracks user swipedIdeaIds and provides unswipedBatch for swipe resumption', async () => {
+    const room = await createRoom('host_1', 'Resumption Room', 2);
+    const docSample = `
+### ★ I-001 First Challenger
+- Status: pot
+- Idea: First.
+
+### ★ I-002 Second Challenger
+- Status: pot
+- Idea: Second.
+    `.trim();
+
+    await syncGoogleDoc(room.id, 'doc1', docSample);
+    room.activeIdeaIds = ['i-001', 'i-002'];
+
+    // User_A swipes I-001
+    await recordSwipe(room.id, 'user_A', 'i-001', 'like');
+
+    const { result } = renderHook(() => useRoomData(room.id, 2, 'user_A'));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.swipedIdeaIds.has('i-001')).toBe(true);
+      expect(result.current.swipedIdeaIds.has('i-002')).toBe(false);
+      // unswipedBatch skips I-001 and only returns I-002
+      expect(result.current.unswipedBatch.map((i) => i.id)).toEqual(['i-002']);
     });
   });
 });

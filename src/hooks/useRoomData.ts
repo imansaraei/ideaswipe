@@ -7,7 +7,7 @@ import {
   getRoomSwipes,
   subscribeToRoomUpdates,
 } from '../services/roomService';
-import { rankLeaderboardIdeas } from '../lib/leaderboard';
+import { rankLeaderboardIdeas, pickNextChallengers } from '../lib/leaderboard';
 import { db, isFirebaseConfigured } from '../services/firebase';
 
 export interface UseRoomDataResult {
@@ -16,6 +16,8 @@ export interface UseRoomDataResult {
   champions: Idea[];
   leaderboard: Idea[];
   activeBatch: Idea[];
+  unswipedBatch: Idea[];
+  swipedIdeaIds: Set<string>;
   swipes: Swipe[];
   loading: boolean;
   error: string | null;
@@ -30,7 +32,8 @@ export interface UseRoomDataResult {
  */
 export function useRoomData(
   roomIdOrCode?: string | null,
-  limit?: number
+  limit?: number,
+  userId?: string | null
 ): UseRoomDataResult {
   const [room, setRoom] = useState<Room | null>(null);
   const [ideas, setIdeas] = useState<Idea[]>([]);
@@ -180,11 +183,35 @@ export function useRoomData(
   }, [ideas, effectiveLimit]);
 
   const activeBatch = useMemo(() => {
-    const activeIds = new Set(room?.activeIdeaIds || []);
-    return ideas.filter(
-      (idea) => idea.status === 'active' || activeIds.has(idea.id)
+    const activeIds = room?.activeIdeaIds || [];
+    if (activeIds.length > 0) {
+      const ideasById = new Map(ideas.map((i) => [i.id, i]));
+      return activeIds
+        .map((id) => ideasById.get(id))
+        .filter((i): i is Idea => Boolean(i && i.status !== 'archived'));
+    }
+    // Fallback: If activeIdeaIds is empty, fallback to taking up to N ideas from pot
+    const pot = ideas.filter(
+      (idea) => idea.status === 'pot' || (!idea.status && idea.status !== 'archived')
     );
-  }, [ideas, room?.activeIdeaIds]);
+    return pickNextChallengers(pot, effectiveLimit);
+  }, [ideas, room?.activeIdeaIds, effectiveLimit]);
+
+  const swipedIdeaIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!userId) return ids;
+    for (const s of swipes) {
+      if (s.userId === userId) {
+        ids.add(s.ideaId);
+      }
+    }
+    return ids;
+  }, [swipes, userId]);
+
+  const unswipedBatch = useMemo(() => {
+    if (swipedIdeaIds.size === 0) return activeBatch;
+    return activeBatch.filter((idea) => !swipedIdeaIds.has(idea.id));
+  }, [activeBatch, swipedIdeaIds]);
 
   const participantCount = useMemo(() => {
     const userIds = new Set(swipes.map((s) => s.userId).filter(Boolean));
@@ -207,6 +234,8 @@ export function useRoomData(
     champions,
     leaderboard: champions,
     activeBatch,
+    unswipedBatch,
+    swipedIdeaIds,
     swipes,
     loading,
     error,
