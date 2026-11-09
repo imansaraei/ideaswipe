@@ -542,4 +542,58 @@ describe('recordSwipe Helper (Offline / Mock Fallback)', () => {
     expect(screen.getByTestId('swipe-deck-completion')).toBeDefined();
     expect(screen.getByText("You're All Caught Up!")).toBeDefined();
   });
+
+  it('SwipeDeck does not skip intermediate cards when swipedIdeaIds updates reactively', async () => {
+    const ideas: Idea[] = [
+      { id: '1', code: 'I-001', title: 'First', oneLiner: 'One', category: 'Tech', status: 'active', likesCount: 0, passesCount: 0, score: 0 },
+      { id: '2', code: 'I-002', title: 'Second', oneLiner: 'Two', category: 'Tech', status: 'active', likesCount: 0, passesCount: 0, score: 0 },
+      { id: '3', code: 'I-003', title: 'Third', oneLiner: 'Three', category: 'Tech', status: 'active', likesCount: 0, passesCount: 0, score: 0 },
+    ];
+
+    const { rerender } = render(
+      React.createElement(SwipeDeck, {
+        ideas,
+        swipedIdeaIds: [],
+      })
+    );
+
+    // Initial state: Card 1 is top card
+    expect(screen.getByText('First')).toBeDefined();
+
+    // Swipe Card 1 via accessible button
+    const likeBtn1 = screen.getByLabelText(/Match with First/i);
+    await act(async () => {
+      fireEvent.click(likeBtn1);
+      await new Promise((r) => setTimeout(r, 260));
+    });
+
+    // Reactive update simulates hook receiving swipe for Card 1
+    rerender(
+      React.createElement(SwipeDeck, {
+        ideas,
+        swipedIdeaIds: ['1'],
+      })
+    );
+
+    // Card 2 MUST be visible next (NOT skipped to Card 3)
+    expect(screen.getByText('Second')).toBeDefined();
+
+    // Swipe Card 2
+    const likeBtn2 = screen.getByLabelText(/Match with Second/i);
+    await act(async () => {
+      fireEvent.click(likeBtn2);
+      await new Promise((r) => setTimeout(r, 260));
+    });
+
+    // Reactive update adds Card 2 to swiped
+    rerender(
+      React.createElement(SwipeDeck, {
+        ideas,
+        swipedIdeaIds: ['1', '2'],
+      })
+    );
+
+    // Card 3 MUST be visible next
+    expect(screen.getByText('Third')).toBeDefined();
+  });
 });

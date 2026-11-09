@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Idea } from '../types';
 import { SwipeDirection } from '../hooks/useSwipeGesture';
 import { SwipeCard } from './SwipeCard';
@@ -38,10 +38,24 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
     return swipedIdeaIds instanceof Set ? swipedIdeaIds : new Set(swipedIdeaIds);
   }, [swipedIdeaIds]);
 
+  // Snapshot initial swiped set so reactive background swipe updates do not double-advance currentIndex
+  const initialSwipedSnapshot = useRef<Set<string> | null>(null);
+  const ideasKey = useMemo(() => ideas.map((i) => i.id).join(','), [ideas]);
+
+  useEffect(() => {
+    initialSwipedSnapshot.current = null;
+    setCurrentIndex(0);
+  }, [ideasKey]);
+
+  if (initialSwipedSnapshot.current === null && swipedSet !== null) {
+    initialSwipedSnapshot.current = new Set(swipedSet);
+  }
+
   const effectiveIdeas = useMemo(() => {
-    if (!swipedSet || swipedSet.size === 0) return ideas;
-    return ideas.filter((idea) => !swipedSet.has(idea.id));
-  }, [ideas, swipedSet]);
+    const filterSet = initialSwipedSnapshot.current;
+    if (!filterSet || filterSet.size === 0) return ideas;
+    return ideas.filter((idea) => !filterSet.has(idea.id));
+  }, [ideas, ideasKey]);
 
   const isRoundAlreadyCompleted =
     ideas.length > 0 && swipedSet !== null && effectiveIdeas.length === 0;
