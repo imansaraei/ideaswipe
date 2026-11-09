@@ -36,19 +36,8 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
   const isEmpty = totalCards === 0;
 
   const handleCardSwipe = useCallback(
-    async (ideaId: string, direction: SwipeDirection) => {
-      // If roomId and userId are provided, record to backend store
-      if (roomId && userId) {
-        try {
-          await recordSwipe(roomId, userId, ideaId, direction);
-        } catch (err) {
-          console.warn('[SwipeDeck] Failed to record vote:', err);
-        }
-      }
-
-      // Notify parent listener
-      await onSwipe?.(ideaId, direction);
-
+    (ideaId: string, direction: SwipeDirection) => {
+      // Optimistically advance card immediately so 60fps gesture transition is seamless
       setCurrentIndex((prev) => {
         const nextIndex = prev + 1;
         if (nextIndex >= totalCards) {
@@ -56,6 +45,20 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
         }
         return nextIndex;
       });
+
+      // Background write without blocking UI or animation
+      if (roomId && userId) {
+        recordSwipe(roomId, userId, ideaId, direction).catch((err) => {
+          console.warn('[SwipeDeck] Failed to record vote:', err);
+        });
+      }
+
+      // Notify parent listener asynchronously
+      try {
+        onSwipe?.(ideaId, direction);
+      } catch (err) {
+        console.warn('[SwipeDeck] onSwipe error:', err);
+      }
     },
     [roomId, userId, onSwipe, totalCards, onFinish]
   );

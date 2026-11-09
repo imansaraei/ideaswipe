@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, increment } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, increment, writeBatch } from 'firebase/firestore';
 import { Room, Idea, RoomSchedule, GoogleDocConfig, Swipe } from '../types';
 import { parseIdeasFromDoc } from '../lib/parser';
 import { generateRoomCode } from './auth';
@@ -309,11 +309,13 @@ export async function recordSwipe(
       const swipeRef = doc(db, 'rooms', roomId, 'swipes', swipeId);
       const ideaRef = doc(db, 'rooms', roomId, 'ideas', ideaId);
 
-      await setDoc(swipeRef, swipe);
-      await updateDoc(ideaRef, {
+      const batch = writeBatch(db);
+      batch.set(swipeRef, swipe);
+      batch.update(ideaRef, {
         [direction === 'like' ? 'likesCount' : 'passesCount']: increment(1),
         updatedAt: Date.now(),
       });
+      await batch.commit();
       return swipe;
     } catch (err) {
       console.warn('[RoomService] Firebase recordSwipe failed, falling back to mock store:', err);
