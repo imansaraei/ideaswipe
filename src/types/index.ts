@@ -37,6 +37,7 @@ export interface Room {
   activeIdeaIds: string[];
   schedule?: RoomSchedule;
   googleDoc?: GoogleDocConfig;
+  lastShuffledAt?: number;
   createdAt: number;
 }
 
