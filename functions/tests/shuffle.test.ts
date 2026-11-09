@@ -197,10 +197,19 @@ describe('executeRoomShuffle', () => {
     const mockUpdates: Record<string, any> = {};
 
     const mockDb = {
+      batch: () => ({
+        update: (ref: any, patch: any) => {
+          if (ref?.path) {
+            mockUpdates[ref.path] = patch;
+          }
+        },
+        commit: async () => {},
+      }),
       collection: (colName: string) => {
         if (colName === 'rooms') {
           return {
             doc: (docId: string) => ({
+              path: `rooms/${docId}`,
               get: async () => ({
                 exists: docId === 'room-1',
                 data: () => (docId === 'room-1' ? roomData : undefined),
@@ -218,6 +227,7 @@ describe('executeRoomShuffle', () => {
                       })),
                     }),
                     doc: (ideaId: string) => ({
+                      path: `ideas/${ideaId}`,
                       update: async (patch: any) => {
                         mockUpdates[`ideas/${ideaId}`] = patch;
                       },
@@ -320,6 +330,19 @@ describe('executeRoomShuffle', () => {
     const result = await executeRoomShuffle('room-short', mockDb as any);
     expect(result.nextChallengers).toHaveLength(1);
     expect(result.nextChallengers[0].id).toBe('pot-only-1');
+  });
+
+  it('throws error when room does not exist', async () => {
+    const mockDb = {
+      collection: () => ({
+        doc: () => ({
+          get: async () => ({ exists: false }),
+        }),
+      }),
+    };
+    await expect(executeRoomShuffle('missing-room-123', mockDb as any)).rejects.toThrow(
+      'Room missing-room-123 not found'
+    );
   });
 });
 

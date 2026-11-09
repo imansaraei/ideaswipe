@@ -132,8 +132,14 @@ export async function executeRoomShuffle(
   const roomDocRef = firestore.collection('rooms').doc(roomId);
   const roomSnap = await roomDocRef.get();
 
-  if (!roomSnap.exists && typeof roomSnap.data !== 'function') {
-    throw new Error(`Room not found: ${roomId}`);
+  const exists =
+    typeof roomSnap.exists === 'boolean'
+      ? roomSnap.exists
+      : typeof roomSnap.exists === 'function'
+      ? roomSnap.exists()
+      : true;
+  if (!exists) {
+    throw new Error(`Room ${roomId} not found`);
   }
 
   const room = (roomSnap.data ? roomSnap.data() : roomSnap) as Room;
@@ -174,23 +180,6 @@ export async function executeRoomShuffle(
   const kothResult = evaluateKingOfTheHill(currentChampions, currentChallengers, limit);
   const { champions, backToPot } = kothResult;
 
-  // Persist updated statuses
-  for (const champ of champions) {
-    await ideasCol.doc(champ.id).update({
-      status: 'active',
-      score: champ.score,
-      updatedAt: Date.now(),
-    });
-  }
-
-  for (const dethroned of backToPot) {
-    await ideasCol.doc(dethroned.id).update({
-      status: 'pot',
-      score: dethroned.score,
-      updatedAt: Date.now(),
-    });
-  }
-
   // Pool remaining pot ideas with newly dethroned ideas
   const championIds = new Set(champions.map((c) => c.id));
   const availablePot = [...potIdeas, ...backToPot].filter(
@@ -201,12 +190,49 @@ export async function executeRoomShuffle(
   const nextChallengers = pickNextChallengers(availablePot, limit);
   const nextActiveIds = nextChallengers.map((c) => c.id);
 
-  // Update room
+  // Update ideas and room atomically using Firestore batch
   const now = Date.now();
-  await roomDocRef.update({
-    activeIdeaIds: nextActiveIds,
-    lastShuffledAt: now,
-  });
+  if (typeof firestore.batch === 'function') {
+    const batch = firestore.batch();
+    for (const champ of champions) {
+      batch.update(ideasCol.doc(champ.id), {
+        status: 'active',
+        score: champ.score,
+        updatedAt: now,
+      });
+    }
+    for (const dethroned of backToPot) {
+      batch.update(ideasCol.doc(dethroned.id), {
+        status: 'pot',
+        score: dethroned.score,
+        updatedAt: now,
+      });
+    }
+    batch.update(roomDocRef, {
+      activeIdeaIds: nextActiveIds,
+      lastShuffledAt: now,
+    });
+    await batch.commit();
+  } else {
+    for (const champ of champions) {
+      await ideasCol.doc(champ.id).update({
+        status: 'active',
+        score: champ.score,
+        updatedAt: now,
+      });
+    }
+    for (const dethroned of backToPot) {
+      await ideasCol.doc(dethroned.id).update({
+        status: 'pot',
+        score: dethroned.score,
+        updatedAt: now,
+      });
+    }
+    await roomDocRef.update({
+      activeIdeaIds: nextActiveIds,
+      lastShuffledAt: now,
+    });
+  }
 
   // Collect member tokens for notification
   const tokens = new Set<string>();
