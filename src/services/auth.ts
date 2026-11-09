@@ -137,21 +137,28 @@ export async function verifyEmailOtp(email: string, code: string): Promise<User>
 }
 
 export function getCurrentUser(): User | null {
-  if (isFirebaseConfigured && auth) {
+  if (isFirebaseConfigured && auth && auth.currentUser) {
     return auth.currentUser;
   }
   return mockCurrentUser;
 }
 
 export function onAuthStateChange(callback: (user: User | null) => void): () => void {
+  authSubscribers.add(callback);
+  callback(getCurrentUser());
+
+  let unsubscribeFirebase = () => {};
   if (isFirebaseConfigured && auth) {
-    return onAuthStateChanged(auth, callback);
+    unsubscribeFirebase = onAuthStateChanged(auth, (fbUser) => {
+      if (fbUser) {
+        notifySubscribers(fbUser);
+      }
+    });
   }
 
-  authSubscribers.add(callback);
-  callback(mockCurrentUser);
   return () => {
     authSubscribers.delete(callback);
+    unsubscribeFirebase();
   };
 }
 
