@@ -1,7 +1,70 @@
-import React from 'react';
-import { Sparkles, Layers, Trophy } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Sparkles, Layers, Trophy, Bell, BellOff, Download, X } from 'lucide-react';
+import {
+  requestNotificationPermission,
+  getNotificationPermission,
+  registerServiceWorker,
+} from './services/notifications';
+import { getCurrentUser } from './services/auth';
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
 
 export const App: React.FC = () => {
+  const [isSubscribed, setIsSubscribed] = useState<boolean>(() => {
+    return getNotificationPermission() === 'granted';
+  });
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState<boolean>(false);
+
+  useEffect(() => {
+    // Register background FCM Service Worker
+    registerServiceWorker();
+
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e as BeforeInstallPromptEvent);
+      setShowInstallBanner(true);
+    };
+
+    const handleAppInstalled = () => {
+      setShowInstallBanner(false);
+      setInstallPrompt(null);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleToggleNotifications = async () => {
+    const user = getCurrentUser();
+    const token = await requestNotificationPermission(user?.uid);
+    if (token) {
+      setIsSubscribed(true);
+    }
+  };
+
+  const handleInstallClick = async () => {
+    if (!installPrompt) return;
+    try {
+      await installPrompt.prompt();
+      const choice = await installPrompt.userChoice;
+      if (choice.outcome === 'accepted') {
+        setShowInstallBanner(false);
+        setInstallPrompt(null);
+      }
+    } catch (err) {
+      console.warn('[PWA] Install prompt failed:', err);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-obsidian text-mint flex flex-col items-center justify-between p-4 selection:bg-jade/30">
       {/* Header */}
@@ -14,10 +77,64 @@ export const App: React.FC = () => {
             Idea<span className="text-jade">Swipe</span>
           </h1>
         </div>
-        <div className="px-3 py-1 rounded-full bg-surface border border-jade/30 text-xs font-mono-tabular text-jade">
-          ROOM: SWP001
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleToggleNotifications}
+            aria-label="Toggle notifications"
+            className={`p-2 rounded-lg border transition-colors ${
+              isSubscribed
+                ? 'bg-jade/10 border-jade/50 text-jade shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                : 'bg-surface border-jade/20 text-mint/60 hover:text-mint hover:border-jade/40'
+            }`}
+            title={isSubscribed ? 'Notifications enabled' : 'Enable daily shuffle notifications'}
+          >
+            {isSubscribed ? <Bell className="w-4 h-4 text-jade" /> : <BellOff className="w-4 h-4" />}
+          </button>
+
+          <div className="px-3 py-1 rounded-full bg-surface border border-jade/30 text-xs font-mono-tabular text-jade">
+            ROOM: SWP001
+          </div>
         </div>
       </header>
+
+      {/* Optional Install Banner */}
+      {showInstallBanner && installPrompt && (
+        <aside
+          role="region"
+          aria-label="Install App Banner"
+          className="w-full max-w-md mt-3 px-4 py-3 rounded-xl bg-surface/95 border border-jade/40 border-jade-glow flex items-center justify-between gap-3 text-xs shadow-lg animate-in fade-in duration-200"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-jade/10 border border-jade/30 text-jade">
+              <Download className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="font-semibold text-ivory">Install IdeaSwipe</p>
+              <p className="text-mint/70 text-[11px]">Add to home screen for daily idea swiping</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleInstallClick}
+              className="px-3 py-1.5 rounded-lg bg-jade hover:bg-jade-focus text-obsidian font-semibold transition-colors text-xs flex items-center gap-1"
+              aria-label="Install App"
+            >
+              Install
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowInstallBanner(false)}
+              className="p-1 rounded-md text-mint/50 hover:text-mint hover:bg-surface-elevated transition-colors"
+              aria-label="Dismiss banner"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </aside>
+      )}
 
       {/* Main Content Area / Deck Shell */}
       <main className="w-full max-w-md my-auto flex flex-col items-center justify-center py-6">

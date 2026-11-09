@@ -1,0 +1,26 @@
+{
+  "name": "IdeaSwipe",
+  "short_name": "IdeaSwipe",
+  "description": "Consensus-driven idea curation for friend groups. Swipe right to like, left to pass.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#030705",
+  "background_color": "#030705",
+  "categories": ["productivity", "social", "utilities"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

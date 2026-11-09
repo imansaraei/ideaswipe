@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="104" fill="#030705"/>
+  <rect x="16" y="16" width="480" height="480" rx="92" fill="none" stroke="#10b981" stroke-opacity="0.3" stroke-width="8"/>
+  <g transform="translate(136, 120)">
+    <!-- Card stack representing swiping deck -->
+    <rect x="40" y="40" width="160" height="220" rx="20" fill="#0c1e14" stroke="#10b981" stroke-opacity="0.4" stroke-width="6" transform="rotate(8 120 150)"/>
+    <rect x="20" y="20" width="160" height="220" rx="20" fill="#05130b" stroke="#10b981" stroke-width="8" transform="rotate(-4 100 130)"/>
+    <!-- Sparkle / Star icon in center -->
+    <path d="M100 60 L112 95 L145 100 L118 120 L126 155 L100 135 L74 155 L82 120 L55 100 L88 95 Z" fill="#10b981"/>
+  </g>
+</svg>
