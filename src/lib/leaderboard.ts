@@ -34,10 +34,12 @@ export function evaluateKingOfTheHill(
   }
 
   const getScore = (idea: Idea): number => {
+    const total = (idea.likesCount || 0) + (idea.passesCount || 0);
+    if (total > 0) return (idea.likesCount || 0) / total;
     if (typeof idea.score === 'number' && !isNaN(idea.score)) {
       return idea.score;
     }
-    return calculateIdeaScore(idea.likesCount, idea.passesCount);
+    return 0;
   };
 
   const sortedCandidates = Array.from(poolMap.values()).sort((a, b) => {
@@ -87,10 +89,12 @@ export function evaluateKingOfTheHill(
  */
 export function rankLeaderboardIdeas(ideas: Idea[], limit?: number): Idea[] {
   const getScore = (idea: Idea): number => {
+    const total = (idea.likesCount || 0) + (idea.passesCount || 0);
+    if (total > 0) return (idea.likesCount || 0) / total;
     if (typeof idea.score === 'number' && !isNaN(idea.score)) {
       return idea.score;
     }
-    return calculateIdeaScore(idea.likesCount, idea.passesCount);
+    return 0;
   };
 
   const sorted = [...ideas]
