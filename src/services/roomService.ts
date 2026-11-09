@@ -1,5 +1,5 @@
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
-import { Room, Idea, RoomSchedule, GoogleDocConfig } from '../types';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, increment } from 'firebase/firestore';
+import { Room, Idea, RoomSchedule, GoogleDocConfig, Swipe } from '../types';
 import { parseIdeasFromDoc } from '../lib/parser';
 import { generateRoomCode } from './auth';
 import { db, isFirebaseConfigured } from './firebase';
@@ -16,6 +16,7 @@ export const GOOGLE_DOC_MARKDOWN_TEMPLATE = `### ★ I-001 Title of Idea
 const mockRooms = new Map<string, Room>();
 const mockRoomsByCode = new Map<string, string>();
 const mockIdeasByRoom = new Map<string, Idea[]>();
+const mockSwipes = new Map<string, Swipe>();
 
 /**
  * Reset mock stores for isolated unit and integration testing.
@@ -24,6 +25,7 @@ export function resetMockRoomStoreForTesting(): void {
   mockRooms.clear();
   mockRoomsByCode.clear();
   mockIdeasByRoom.clear();
+  mockSwipes.clear();
 }
 
 /**
@@ -277,4 +279,91 @@ export async function toggleIdeaStatus(
     target.status = status;
     target.updatedAt = Date.now();
   }
+}
+
+/**
+ * Records a user swipe (like or pass) on an idea.
+ * Atomically creates a swipe document and increments the idea's vote counter.
+ */
+export async function recordSwipe(
+  roomId: string,
+  userId: string,
+  ideaId: string,
+  direction: 'like' | 'pass'
+): Promise<Swipe> {
+  if (!roomId || !userId || !ideaId) {
+    throw new Error('roomId, userId, and ideaId are required to record a swipe');
+  }
+
+  const swipeId = `${userId}_${ideaId}`;
+  const swipe: Swipe = {
+    id: swipeId,
+    userId,
+    ideaId,
+    vote: direction,
+    timestamp: Date.now(),
+  };
+
+  if (isFirebaseConfigured && db) {
+    try {
+      const swipeRef = doc(db, 'rooms', roomId, 'swipes', swipeId);
+      const ideaRef = doc(db, 'rooms', roomId, 'ideas', ideaId);
+
+      await setDoc(swipeRef, swipe);
+      await updateDoc(ideaRef, {
+        [direction === 'like' ? 'likesCount' : 'passesCount']: increment(1),
+        updatedAt: Date.now(),
+      });
+      return swipe;
+    } catch (err) {
+      console.warn('[RoomService] Firebase recordSwipe failed, falling back to mock store:', err);
+    }
+  }
+
+  // Offline / Mock fallback
+  mockSwipes.set(`${roomId}_${swipeId}`, swipe);
+
+  const roomIdeas = mockIdeasByRoom.get(roomId) || [];
+  const targetIdea = roomIdeas.find((i) => i.id === ideaId);
+  if (targetIdea) {
+    if (direction === 'like') {
+      targetIdea.likesCount = (targetIdea.likesCount || 0) + 1;
+    } else {
+      targetIdea.passesCount = (targetIdea.passesCount || 0) + 1;
+    }
+    const total = (targetIdea.likesCount || 0) + (targetIdea.passesCount || 0);
+    targetIdea.score = total > 0 ? (targetIdea.likesCount || 0) / total : 0;
+    targetIdea.updatedAt = Date.now();
+  }
+
+  return swipe;
+}
+
+/**
+ * Retrieves all swipes recorded for a room or specific user in a room.
+ */
+export async function getRoomSwipes(roomId: string, userId?: string): Promise<Swipe[]> {
+  if (!roomId) return [];
+
+  if (isFirebaseConfigured && db) {
+    try {
+      const swipesCol = collection(db, 'rooms', roomId, 'swipes');
+      const q = userId ? query(swipesCol, where('userId', '==', userId)) : swipesCol;
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => d.data() as Swipe);
+    } catch (err) {
+      console.warn('[RoomService] Firebase getRoomSwipes failed, falling back to mock store:', err);
+    }
+  }
+
+  const results: Swipe[] = [];
+  const prefix = `${roomId}_`;
+  for (const [key, swipe] of mockSwipes.entries()) {
+    if (key.startsWith(prefix)) {
+      if (!userId || swipe.userId === userId) {
+        results.push(swipe);
+      }
+    }
+  }
+  return results;
 }
