@@ -468,6 +468,51 @@ export async function recordSwipe(
 }
 
 /**
+ * Removes a user's vote on an idea (used by Undo) and reverses its counter.
+ */
+export async function removeSwipe(roomId: string, userId: string, ideaId: string): Promise<void> {
+  const swipeId = `${userId}_${ideaId}`;
+
+  if (isFirebaseConfigured && db) {
+    try {
+      const swipeRef = doc(db, 'rooms', roomId, 'swipes', swipeId);
+      const existingSnap = await getDoc(swipeRef);
+      if (!existingSnap.exists()) return;
+      const { vote } = existingSnap.data() as Swipe;
+      const batch = writeBatch(db);
+      batch.delete(swipeRef);
+      batch.update(doc(db, 'rooms', roomId, 'ideas', ideaId), {
+        [vote === 'like' ? 'likesCount' : 'passesCount']: increment(-1),
+        updatedAt: Date.now(),
+      });
+      await batch.commit();
+      return;
+    } catch (err) {
+      console.warn('[RoomService] Firebase removeSwipe failed, falling back to mock store:', err);
+    }
+  }
+
+  const mockKey = `${roomId}_${swipeId}`;
+  const existing = mockSwipes.get(mockKey);
+  if (!existing) return;
+  mockSwipes.delete(mockKey);
+
+  const targetIdea = (mockIdeasByRoom.get(roomId) || []).find((i) => i.id === ideaId);
+  if (targetIdea) {
+    if (existing.vote === 'like') {
+      targetIdea.likesCount = Math.max(0, (targetIdea.likesCount || 0) - 1);
+    } else {
+      targetIdea.passesCount = Math.max(0, (targetIdea.passesCount || 0) - 1);
+    }
+    const total = (targetIdea.likesCount || 0) + (targetIdea.passesCount || 0);
+    targetIdea.score = total > 0 ? (targetIdea.likesCount || 0) / total : 0;
+    targetIdea.updatedAt = Date.now();
+  }
+
+  notifyRoomUpdated(roomId);
+}
+
+/**
  * Retrieves all swipes recorded for a room or specific user in a room.
  */
 export async function getRoomSwipes(roomId: string, userId?: string): Promise<Swipe[]> {

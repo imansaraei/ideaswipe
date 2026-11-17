@@ -58,7 +58,7 @@ describe('App Component Navigation & Lifecycle', () => {
     render(React.createElement(App));
 
     await waitFor(() => {
-      expect(screen.getByText(`ROOM: ${room.code}`)).toBeDefined();
+      expect(screen.getByLabelText(`Copy room code ${room.code}`)).toBeDefined();
       expect(screen.getByRole('button', { name: /swipe deck/i })).toBeDefined();
       expect(screen.getByRole('button', { name: /leaderboard/i })).toBeDefined();
     });
@@ -126,7 +126,7 @@ describe('App Component Navigation & Lifecycle', () => {
 
     render(React.createElement(App));
 
-    await screen.findByText(`ROOM: ${room.code}`);
+    await screen.findByLabelText(`Copy room code ${room.code}`);
 
     const leaveBtn = screen.getByRole('button', { name: /leave room/i });
     fireEvent.click(leaveBtn);

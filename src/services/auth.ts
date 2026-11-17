@@ -173,3 +173,20 @@ export async function signOutUser(): Promise<void> {
 export function getStoredOtpForTesting(email: string): string | undefined {
   return mockOtpStore.get(email.trim().toLowerCase());
 }
+
+/**
+ * Stable per-device id for people who are not signed in, so each guest
+ * gets their own votes and host rights instead of sharing one "guest" id.
+ */
+export function getGuestId(): string {
+  const key = 'ideaswipe_guest_id';
+  try {
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+    const id = `guest_${crypto.randomUUID()}`;
+    localStorage.setItem(key, id);
+    return id;
+  } catch {
+    return 'guest';
+  }
+}

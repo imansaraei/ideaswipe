@@ -17,7 +17,7 @@ import {
 import { type User } from 'firebase/auth';
 import { Room } from './types';
 import { getRoom } from './services/roomService';
-import { getCurrentUser, onAuthStateChange, signOutUser } from './services/auth';
+import { getCurrentUser, getGuestId, onAuthStateChange, signOutUser } from './services/auth';
 import {
   requestNotificationPermission,
   getNotificationPermission,
@@ -111,7 +111,7 @@ export const App: React.FC = () => {
     participantCount,
     totalVotes,
     refresh,
-  } = useRoomData(room?.id, room?.leaderboardLimit, user?.uid);
+  } = useRoomData(room?.id, room?.leaderboardLimit, user?.uid || getGuestId());
 
   const currentRoom = liveRoom || room;
 
@@ -172,11 +172,12 @@ export const App: React.FC = () => {
     }
   }, [currentRoom]);
 
+  const voterId = user?.uid || getGuestId();
+
   const isHost = Boolean(
-    user &&
-      currentRoom &&
+    currentRoom &&
       currentRoom.hostUserId &&
-      (user.uid === currentRoom.hostUserId ||
+      (voterId === currentRoom.hostUserId ||
         currentRoom.hostUserId === 'anonymous_host' ||
         currentRoom.hostUserId === 'host_user')
   );
@@ -200,13 +201,13 @@ export const App: React.FC = () => {
           <div className="w-8 h-8 rounded-lg bg-surface border border-jade/40 flex items-center justify-center border-jade-glow shadow-sm">
             <Sparkles className="w-4 h-4 text-jade" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-mint-ivory">
+          <h1 className="hidden min-[400px]:block text-xl font-bold tracking-tight text-mint-ivory">
             Idea<span className="text-jade">Swipe</span>
           </h1>
         </div>
 
         {/* Right header actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Room Code Badge with Click-to-Copy */}
           {currentRoom && (
             <button
@@ -216,7 +217,7 @@ export const App: React.FC = () => {
               className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface border border-jade/30 text-xs font-mono-tabular text-jade hover:border-jade/60 transition-all active:scale-95 cursor-pointer"
               title="Click to copy room code"
             >
-              <span>ROOM: {currentRoom.code}</span>
+              <span className="whitespace-nowrap"><span className="hidden sm:inline">ROOM: </span>{currentRoom.code}</span>
               {copiedCode ? (
                 <Check className="w-3.5 h-3.5 text-jade" />
               ) : (
@@ -273,7 +274,7 @@ export const App: React.FC = () => {
               className="px-3 py-1.5 rounded-lg bg-well hover:bg-well/80 border border-jade/30 text-xs font-semibold text-jade flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
             >
               <LogIn className="w-3.5 h-3.5" />
-              <span>Sign In</span>
+              <span className="hidden sm:inline whitespace-nowrap">Sign In</span>
             </button>
           )}
 
@@ -384,7 +385,7 @@ export const App: React.FC = () => {
             ideas={activeBatch}
             swipedIdeaIds={swipedIdeaIds}
             roomId={currentRoom.id}
-            userId={user?.uid || 'guest'}
+            userId={voterId}
             isHost={isHost}
             onAddIdeas={() => setActiveTab('host')}
             onFinish={() => setActiveTab('rankings')}
@@ -443,7 +444,7 @@ export const App: React.FC = () => {
       <CreateRoomModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        hostUserId={user?.uid || 'anonymous_host'}
+        hostUserId={voterId}
         onRoomCreated={(newRoom) => {
           setRoom(newRoom);
           setActiveTab('host');

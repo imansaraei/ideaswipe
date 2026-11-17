@@ -157,6 +157,7 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({
             </label>
             <input
               id="room-name-input"
+              autoFocus
               type="text"
               required
               value={name}

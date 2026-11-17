@@ -120,9 +120,9 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
               <div className="text-right">
                 <div className="text-[10px] uppercase font-semibold text-mint/50">Participation</div>
                 <div data-testid="participation-stats" className="text-xs font-mono-tabular font-medium text-mint-ivory">
-                  <span>{effectiveParticipantCount} members</span>
+                  <span>{effectiveParticipantCount} {effectiveParticipantCount === 1 ? 'member' : 'members'}</span>
                   {effectiveTotalVotes > 0 && (
-                    <span className="text-mint/60"> • {effectiveTotalVotes} votes</span>
+                    <span className="text-mint/60"> • {effectiveTotalVotes} {effectiveTotalVotes === 1 ? 'vote' : 'votes'}</span>
                   )}
                 </div>
               </div>
