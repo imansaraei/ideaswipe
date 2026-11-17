@@ -1,6 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { X, Copy, Check, FileText, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
-import { syncGoogleDoc, GOOGLE_DOC_MARKDOWN_TEMPLATE, extractDocIdFromUrl } from '../services/roomService';
+import {
+  X,
+  Copy,
+  Check,
+  FileSpreadsheet,
+  ArrowRight,
+  Loader2,
+  AlertCircle,
+  Download,
+} from 'lucide-react';
+import { syncGoogleSheet } from '../services/roomService';
+import {
+  BLANK_SHEET_TEMPLATE_CSV,
+  downloadBlankSheetTemplate,
+  extractSheetIdFromUrl,
+} from '../lib/sheetParser';
 
 export interface GoogleDocImportModalProps {
   isOpen: boolean;
@@ -17,22 +31,26 @@ export const GoogleDocImportModal: React.FC<GoogleDocImportModalProps> = ({
   onSynced,
   currentDocId = '',
 }) => {
-  const [docInput, setDocInput] = useState('');
+  const [sheetInput, setSheetInput] = useState('');
   const [copied, setCopied] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successCount, setSuccessCount] = useState<number | null>(null);
   const [showManualPaste, setShowManualPaste] = useState(false);
-  const [manualMarkdown, setManualMarkdown] = useState('');
+  const [manualCsv, setManualCsv] = useState('');
 
   useEffect(() => {
     if (isOpen) {
-      setDocInput(currentDocId ? `https://docs.google.com/document/d/${currentDocId}/edit` : '');
+      setSheetInput(
+        currentDocId && currentDocId !== 'manual-sheet'
+          ? `https://docs.google.com/spreadsheets/d/${currentDocId}/edit`
+          : ''
+      );
       setCopied(false);
       setError(null);
       setSuccessCount(null);
       setIsLoading(false);
-      setManualMarkdown('');
+      setManualCsv('');
       setShowManualPaste(false);
     }
   }, [isOpen, currentDocId]);
@@ -52,12 +70,11 @@ export const GoogleDocImportModal: React.FC<GoogleDocImportModalProps> = ({
   const handleCopyTemplate = async () => {
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(GOOGLE_DOC_MARKDOWN_TEMPLATE);
+        await navigator.clipboard.writeText(BLANK_SHEET_TEMPLATE_CSV);
       }
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch {
-      // Fallback
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     }
@@ -65,8 +82,8 @@ export const GoogleDocImportModal: React.FC<GoogleDocImportModalProps> = ({
 
   const handleSync = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!docInput.trim() && !manualMarkdown.trim()) {
-      setError('Please provide a Google Doc URL or paste markdown content directly.');
+    if (!sheetInput.trim() && !manualCsv.trim()) {
+      setError('Please provide a Google Sheet URL or paste CSV rows directly.');
       return;
     }
 
@@ -75,19 +92,18 @@ export const GoogleDocImportModal: React.FC<GoogleDocImportModalProps> = ({
     setSuccessCount(null);
 
     try {
-      const docId = extractDocIdFromUrl(docInput.trim()) || 'manual_doc';
-      const count = await syncGoogleDoc(roomId, docId, manualMarkdown.trim() || undefined);
+      const sheetId = extractSheetIdFromUrl(sheetInput.trim()) || 'manual-sheet';
+      const count = await syncGoogleSheet(roomId, sheetId, manualCsv.trim() || undefined);
       setSuccessCount(count);
       onSynced?.(count);
 
-      // Brief delay so user sees success message, then close
       setTimeout(() => {
         onClose();
       }, 900);
     } catch (err: any) {
       setError(
         err?.message ||
-          'Failed to sync Google Doc. Please check permissions (Anyone with the link can view) or use manual paste.'
+          'Failed to sync Google Sheet. Ensure sharing is set to "Anyone with the link" or use manual CSV paste.'
       );
     } finally {
       setIsLoading(false);
@@ -98,150 +114,129 @@ export const GoogleDocImportModal: React.FC<GoogleDocImportModalProps> = ({
     <div
       role="dialog"
       aria-modal="true"
-      aria-labelledby="doc-import-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-obsidian/85 backdrop-blur-md animate-fadeIn"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      aria-labelledby="sync-sheet-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-obsidian/80 backdrop-blur-sm animate-fadeIn"
     >
-      <div className="relative w-full max-w-lg p-6 sm:p-8 bg-surface border border-jade/30 shadow-jade-glow rounded-2xl overflow-hidden transition-all text-mint max-h-[90vh] overflow-y-auto">
-        {/* Holographic top accent line */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-jade to-transparent" />
-
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          aria-label="Close modal"
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-mint/70 hover:text-mint hover:bg-well/50 transition-colors focus:outline-none focus:ring-1 focus:ring-jade"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
+      <div className="relative w-full max-w-lg rounded-2xl bg-surface border border-jade/30 shadow-jade-glow p-6 text-mint space-y-5">
         {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center gap-2 mb-1.5">
-            <div className="w-7 h-7 rounded-lg bg-well border border-jade/30 flex items-center justify-center">
-              <FileText className="w-4 h-4 text-jade" />
-            </div>
-            <h2 id="doc-import-modal-title" className="text-xl sm:text-2xl font-bold tracking-tight text-mint-ivory">
-              Sync with Google Doc
+        <div className="flex items-center justify-between border-b border-jade/20 pb-3">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet className="w-5 h-5 text-jade" />
+            <h2 id="sync-sheet-modal-title" className="text-xl font-bold text-mint-ivory">
+              Sync with Google Sheet
             </h2>
           </div>
-          <p className="text-sm text-mint/70">
-            Import your ideas pool directly from a Google Doc using the markdown consensus schema.
-          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close modal"
+            className="p-1.5 rounded-lg hover:bg-well text-mint/60 hover:text-mint transition-colors active:scale-95 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Template Copy Card */}
-        <div className="mb-6 p-4 rounded-xl bg-card border border-jade/20 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-mint-ivory uppercase tracking-wider">
-              Markdown Schema Template
-            </span>
+        <p className="text-xs text-mint/70 leading-relaxed">
+          Share a 5-column Google Sheet (<strong className="text-mint">no</strong>,{' '}
+          <strong className="text-mint">One-liner Description</strong>,{' '}
+          <strong className="text-mint">Full Description</strong>,{' '}
+          <strong className="text-mint">Further Read/Listen</strong>,{' '}
+          <strong className="text-mint">Pot</strong>) with{' '}
+          <em className="text-jade">&ldquo;Anyone with the link&rdquo;</em> access.
+        </p>
+
+        {/* Template Actions */}
+        <div className="p-3.5 rounded-xl bg-card border border-jade/20 flex items-center justify-between gap-2 flex-wrap">
+          <span className="text-xs font-medium text-mint/80">Need a blank 5-column template?</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={downloadBlankSheetTemplate}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-well hover:bg-well/80 border border-jade/30 text-xs font-semibold text-jade transition-colors active:scale-95 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Blank CSV</span>
+            </button>
             <button
               type="button"
               onClick={handleCopyTemplate}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-well hover:bg-well/80 border border-jade/30 text-xs font-medium text-jade hover:text-jade-focus transition-all shadow-sm"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-well hover:bg-well/80 border border-jade/30 text-xs font-semibold text-mint transition-colors active:scale-95 cursor-pointer"
             >
-              {copied ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-jade" />
-                  <span>Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copy Template</span>
-                </>
-              )}
+              {copied ? <Check className="w-3.5 h-3.5 text-jade" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copied ? 'Copied!' : 'Copy Template'}</span>
             </button>
           </div>
-          <pre className="p-2.5 rounded-lg bg-obsidian border border-jade/10 font-mono-tabular text-[11px] text-mint/80 overflow-x-auto leading-relaxed">
-            {GOOGLE_DOC_MARKDOWN_TEMPLATE}
-          </pre>
-          <p className="text-[11px] text-mint/50">
-            Format each idea with <code className="text-jade">### ★ I-xxx Title</code> and bullet points for Status, One-liner, Category, Problem, and Next step.
-          </p>
         </div>
 
-        {/* Feedback / Alerts */}
-        {error && (
-          <div
-            role="alert"
-            className="mb-4 p-3 rounded-xl bg-rose/10 border border-rose/30 text-rose text-xs sm:text-sm font-medium flex items-start gap-2"
-          >
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {successCount !== null && (
-          <div
-            role="status"
-            className="mb-4 p-3 rounded-xl bg-jade/10 border border-jade/40 text-jade text-xs sm:text-sm font-medium flex items-center gap-2"
-          >
-            <Check className="w-4 h-4 flex-shrink-0" />
-            <span>Successfully synced {successCount} ideas into the pot!</span>
-          </div>
-        )}
-
-        {/* Sync Form */}
+        {/* Form */}
         <form onSubmit={handleSync} className="space-y-4">
           <div>
-            <label htmlFor="doc-url-input" className="block text-xs uppercase tracking-wider text-mint/70 mb-1.5 font-medium">
-              Google Doc URL or ID
+            <label htmlFor="sheet-url-input" className="block text-xs font-medium text-mint/80 mb-1.5">
+              Google Sheet URL or ID
             </label>
             <input
-              id="doc-url-input"
+              id="sheet-url-input"
               type="text"
-              value={docInput}
-              onChange={(e) => setDocInput(e.target.value)}
-              placeholder="https://docs.google.com/document/d/.../edit"
-              disabled={isLoading}
-              className="w-full px-4 py-2.5 bg-card border border-jade/30 rounded-xl text-mint placeholder-mint/30 focus:outline-none focus:border-jade focus:ring-1 focus:ring-jade transition-colors text-sm font-mono-tabular"
+              value={sheetInput}
+              onChange={(e) => setSheetInput(e.target.value)}
+              placeholder="https://docs.google.com/spreadsheets/d/..."
+              className="w-full px-3.5 py-2.5 rounded-xl bg-card border border-jade/30 text-sm text-mint-ivory placeholder-mint/30 focus:border-jade focus:outline-none focus:ring-1 focus:ring-jade/40"
             />
-            <p className="mt-1 text-[11px] text-mint/50">
-              Ensure link sharing is set to <span className="text-jade">"Anyone with the link can view"</span>.
-            </p>
           </div>
 
-          {/* Toggle manual text fallback */}
-          <div>
+          <button
+            type="button"
+            onClick={() => setShowManualPaste(!showManualPaste)}
+            className="text-xs text-jade hover:underline cursor-pointer"
+          >
+            {showManualPaste ? 'Hide manual CSV paste' : 'Or paste CSV rows directly'}
+          </button>
+
+          {showManualPaste && (
+            <textarea
+              rows={4}
+              value={manualCsv}
+              onChange={(e) => setManualCsv(e.target.value)}
+              placeholder={BLANK_SHEET_TEMPLATE_CSV}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-card border border-jade/30 text-xs font-mono-tabular text-mint-ivory placeholder-mint/30 focus:border-jade focus:outline-none"
+            />
+          )}
+
+          {error && (
+            <div className="p-3 rounded-xl bg-rose/10 border border-rose/30 text-xs text-rose flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {successCount !== null && (
+            <div className="p-3 rounded-xl bg-jade/10 border border-jade/40 text-xs text-jade font-medium">
+              Synced {successCount} idea{successCount === 1 ? '' : 's'} from Google Sheet!
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-jade/20">
             <button
               type="button"
-              onClick={() => setShowManualPaste(!showManualPaste)}
-              className="text-xs text-jade/80 hover:text-jade transition-colors underline underline-offset-2"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl bg-well text-mint/70 hover:text-mint text-xs font-medium transition-colors active:scale-95 cursor-pointer"
             >
-              {showManualPaste ? 'Hide direct markdown paste' : 'Or paste document markdown directly'}
+              Cancel
             </button>
-
-            {showManualPaste && (
-              <div className="mt-2 animate-fadeIn">
-                <textarea
-                  rows={4}
-                  value={manualMarkdown}
-                  onChange={(e) => setManualMarkdown(e.target.value)}
-                  placeholder="Paste markdown content starting with ### ★ I-001..."
-                  disabled={isLoading}
-                  className="w-full p-3 bg-card border border-jade/30 rounded-xl text-mint placeholder-mint/30 text-xs font-mono-tabular focus:outline-none focus:border-jade"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Submit Action */}
-          <div className="pt-2">
             <button
               type="submit"
-              disabled={isLoading || (!docInput.trim() && !manualMarkdown.trim())}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-jade hover:bg-jade-focus text-obsidian font-semibold rounded-xl transition-all shadow-md focus:outline-none focus:ring-2 focus:ring-jade/50 disabled:opacity-50"
+              disabled={isLoading}
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-jade hover:bg-jade-focus disabled:opacity-50 text-obsidian text-xs font-bold transition-all shadow-jade-glow active:scale-95 cursor-pointer"
             >
               {isLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Syncing...</span>
+                </>
               ) : (
                 <>
                   <span>Sync Now</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </>
               )}
             </button>

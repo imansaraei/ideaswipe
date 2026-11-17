@@ -1,6 +1,7 @@
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, increment, writeBatch } from 'firebase/firestore';
 import { Room, Idea, RoomSchedule, GoogleDocConfig, Swipe } from '../types';
 import { parseIdeasFromDoc } from '../lib/parser';
+import { extractSheetIdFromUrl, parseIdeasFromSheetCsv } from '../lib/sheetParser';
 import { evaluateKingOfTheHill, pickNextChallengers } from '../lib/leaderboard';
 import { generateRoomCode } from './auth';
 import { db, isFirebaseConfigured } from './firebase';
@@ -297,6 +298,117 @@ export async function syncGoogleDoc(
   const incomingIds = new Set(parsedIdeas.map((i) => i.id));
   for (const prev of existing) {
     if (!incomingIds.has(prev.id)) {
+      merged.push(prev);
+    }
+  }
+
+  mockIdeasByRoom.set(roomId, merged);
+  notifyRoomUpdated(roomId);
+  return parsedIdeas.length;
+}
+
+/**
+ * Syncs ideas from a 5-column Google Sheet (Anyone with the link) or direct CSV text into the room.
+ */
+export async function syncGoogleSheet(
+  roomId: string,
+  sheetUrlOrId: string,
+  directCsv?: string
+): Promise<number> {
+  const sheetId = extractSheetIdFromUrl(sheetUrlOrId);
+  if (!sheetId && !directCsv) {
+    throw new Error('Please provide a valid Google Sheet URL or ID');
+  }
+
+  let csvText = directCsv || '';
+  if (!csvText) {
+    const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
+    const response = await fetch(exportUrl);
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch Google Sheet (${response.status}). Ensure sharing is set to "Anyone with the link".`
+      );
+    }
+    csvText = await response.text();
+    if (csvText.trim().startsWith('<!DOCTYPE html') || csvText.includes('accounts.google.com')) {
+      throw new Error('Google Sheet is private. Set sharing to "Anyone with the link" (Viewer) and try again.');
+    }
+  }
+
+  const parsedIdeas = parseIdeasFromSheetCsv(csvText);
+  if (parsedIdeas.length === 0) {
+    return 0;
+  }
+
+  const googleDocConfig: GoogleDocConfig = {
+    docId: sheetId || 'manual-sheet',
+    lastSyncedAt: Date.now(),
+  };
+
+  if (isFirebaseConfigured && db) {
+    try {
+      const roomRef = doc(db, 'rooms', roomId);
+      await updateDoc(roomRef, { googleDoc: googleDocConfig });
+
+      const ideasCol = collection(db, 'rooms', roomId, 'ideas');
+      const existingSnap = await getDocs(ideasCol);
+      const existingMap = new Map<string, Idea>();
+      existingSnap.docs.forEach((d) => {
+        const data = d.data() as Idea;
+        existingMap.set(data.id, data);
+        if (data.code) existingMap.set(data.code.toUpperCase(), data);
+      });
+
+      for (const idea of parsedIdeas) {
+        const prev = existingMap.get(idea.id) || (idea.code ? existingMap.get(idea.code.toUpperCase()) : undefined);
+        const mergedIdea: Idea = prev
+          ? {
+              ...idea,
+              likesCount: prev.likesCount ?? 0,
+              passesCount: prev.passesCount ?? 0,
+              score: prev.score ?? 0,
+              status: idea.status === 'archived' ? 'archived' : prev.status,
+            }
+          : idea;
+        await setDoc(doc(db, 'rooms', roomId, 'ideas', mergedIdea.id), mergedIdea, { merge: true });
+      }
+
+      return parsedIdeas.length;
+    } catch (err) {
+      console.warn('[RoomService] Firebase syncGoogleSheet failed, falling back to mock store:', err);
+    }
+  }
+
+  const room = mockRooms.get(roomId);
+  if (room) {
+    room.googleDoc = googleDocConfig;
+  }
+
+  const existing = mockIdeasByRoom.get(roomId) || [];
+  const existingMap = new Map<string, Idea>();
+  existing.forEach((i) => {
+    existingMap.set(i.id, i);
+    if (i.code) existingMap.set(i.code.toUpperCase(), i);
+  });
+
+  const merged = parsedIdeas.map((newIdea) => {
+    const prev = existingMap.get(newIdea.id) || (newIdea.code ? existingMap.get(newIdea.code.toUpperCase()) : undefined);
+    if (prev) {
+      return {
+        ...newIdea,
+        status: newIdea.status === 'archived' ? 'archived' : prev.status,
+        likesCount: prev.likesCount,
+        passesCount: prev.passesCount,
+        score: prev.score,
+      };
+    }
+    return newIdea;
+  });
+
+  const incomingCodes = new Set(parsedIdeas.map((i) => i.code.toUpperCase()));
+  const incomingIds = new Set(parsedIdeas.map((i) => i.id));
+  for (const prev of existing) {
+    if (!incomingCodes.has(prev.code.toUpperCase()) && !incomingIds.has(prev.id)) {
       merged.push(prev);
     }
   }

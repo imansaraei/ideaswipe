@@ -17,6 +17,7 @@ import {
 } from '../src/services/roomService';
 import { CreateRoomModal } from '../src/components/CreateRoomModal';
 import { GoogleDocImportModal } from '../src/components/GoogleDocImportModal';
+import { BLANK_SHEET_TEMPLATE_CSV } from '../src/lib/sheetParser';
 import { HostDashboard } from '../src/components/HostDashboard';
 import { Room, Idea } from '../src/types';
 
@@ -217,7 +218,7 @@ describe('CreateRoomModal Component', () => {
 });
 
 describe('GoogleDocImportModal Component', () => {
-  it('renders and allows copying the markdown template', async () => {
+  it('renders and allows copying the blank sheet template', async () => {
     const writeTextMock = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, {
       clipboard: { writeText: writeTextMock },
@@ -231,31 +232,28 @@ describe('GoogleDocImportModal Component', () => {
       })
     );
 
-    expect(screen.getByText(/sync with google doc/i)).toBeDefined();
+    expect(screen.getByText(/sync with google sheet/i)).toBeDefined();
     const copyBtn = screen.getByRole('button', { name: /copy template/i });
     fireEvent.click(copyBtn);
 
     await waitFor(() => {
-      expect(writeTextMock).toHaveBeenCalledWith(GOOGLE_DOC_MARKDOWN_TEMPLATE);
+      expect(writeTextMock).toHaveBeenCalledWith(BLANK_SHEET_TEMPLATE_CSV);
       expect(screen.getByText(/copied/i)).toBeDefined();
     });
   });
 
-  it('triggers sync on submitting a Google Doc URL', async () => {
+  it('triggers sync on submitting a Google Sheet URL', async () => {
     const handleSynced = vi.fn();
     const handleClose = vi.fn();
 
     // Create room first in mock store
     const room = await createRoom('host_1', 'Modal Sync Room');
 
-    // Stub fetch
+    // Stub fetch with 5-column CSV
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      text: async () => `
-### ★ I-005 Auto Transcriber
-- Status: pot
-- Idea: Speech to text helper.
-      `.trim(),
+      text: async () =>
+        `no,One-liner Description,Full Description,Further Read/Listen,Pot\n1,Auto Transcriber,Speech to text helper.,https://example.com,yes`,
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -268,10 +266,10 @@ describe('GoogleDocImportModal Component', () => {
       })
     );
 
-    const input = screen.getByPlaceholderText(/docs\.google\.com/i);
+    const input = screen.getByPlaceholderText(/docs\.google\.com\/spreadsheets/i);
     fireEvent.change(input, {
       target: {
-        value: 'https://docs.google.com/document/d/1234567890abcdef/edit',
+        value: 'https://docs.google.com/spreadsheets/d/1234567890abcdef/edit',
       },
     });
 

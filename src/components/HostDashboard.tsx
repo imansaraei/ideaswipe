@@ -179,7 +179,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
           </h1>
           {room.googleDoc?.lastSyncedAt && (
             <p className="text-xs text-mint/50">
-              Last synced from Google Doc: {new Date(room.googleDoc.lastSyncedAt).toLocaleTimeString()}
+              Last synced from Google Sheet: {new Date(room.googleDoc.lastSyncedAt).toLocaleTimeString()}
             </p>
           )}
         </div>
@@ -235,7 +235,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
             className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-jade hover:bg-jade-focus text-obsidian font-bold transition-all shadow-jade-glow active:scale-95 cursor-pointer"
           >
             <RefreshCw className="w-4 h-4" />
-            <span className="text-sm">Sync Doc</span>
+            <span className="text-sm">Sync Sheet</span>
           </button>
         </div>
       </div>
@@ -332,7 +332,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
             </h3>
             <p className="text-xs text-mint/60 max-w-sm mx-auto">
               {activeTab === 'pot'
-                ? 'Add ideas manually with the button above, sync a Google Doc, or move archived ideas back into rotation.'
+                ? 'Add ideas manually with the button above, sync a Google Sheet, or move archived ideas back into rotation.'
                 : activeTab === 'active'
                 ? 'Ideas currently being swiped on by raters in the King of the Hill arena appear here.'
                 : 'Ideas you drop or archive will be kept here safely for future retrieval.'}
@@ -352,7 +352,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-well hover:bg-well/80 border border-jade/30 text-xs text-jade font-medium transition-colors active:scale-95 cursor-pointer"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>Import via Google Doc</span>
+                  <span>Import via Google Sheet</span>
                 </button>
               </div>
             )}

@@ -7,6 +7,7 @@ export interface Idea {
   oneLiner: string;
   problemStatement?: string;
   targetAudience?: string;
+  furtherRead?: string;
   category: string;
   status: IdeaStatus;
   likesCount: number;

@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { Idea } from '../types';
 import { useSwipeGesture, SwipeDirection } from '../hooks/useSwipeGesture';
-import { Check, X, Tag, Lightbulb, Target } from 'lucide-react';
+import { Check, X, Tag, Lightbulb, Target, ExternalLink } from 'lucide-react';
 
 export interface SwipeCardProps {
   idea: Idea;
@@ -187,6 +187,20 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
           </div>
           <p>{idea.targetAudience}</p>
         </div>
+      )}
+
+      {/* Further Read / Listen if available */}
+      {idea.furtherRead && (
+        <a
+          href={idea.furtherRead.startsWith('http') ? idea.furtherRead : `https://${idea.furtherRead}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-jade hover:underline"
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          <span>Further Read / Listen</span>
+        </a>
       )}
 
       {/* Accessible Action Buttons */}
