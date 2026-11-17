@@ -73,16 +73,16 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isTopCard, disabled, triggerSwipe]);
 
-  // Compute dynamic glow border and box shadow
-  let dynamicBorderColor = 'rgba(16, 185, 129, 0.2)';
-  let dynamicBoxShadow = '0 12px 36px -8px rgba(0, 0, 0, 0.75), 0 0 1px rgba(16, 185, 129, 0.2)';
+  // Compute dynamic glow border and box shadow (Linear/Raycast hairline + subtle elevation)
+  let dynamicBorderColor = 'rgba(255, 255, 255, 0.09)';
+  let dynamicBoxShadow = 'inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 16px 40px -8px rgba(0, 0, 0, 0.75)';
 
   if (isTopCard && glowColor === 'jade') {
-    dynamicBorderColor = `rgba(16, 185, 129, ${0.3 + glowIntensity * 0.7})`;
-    dynamicBoxShadow = `0 0 ${15 + glowIntensity * 30}px rgba(16, 185, 129, ${0.25 + glowIntensity * 0.5}), 0 16px 36px -8px rgba(0, 0, 0, 0.8)`;
+    dynamicBorderColor = `rgba(94, 106, 210, ${0.35 + glowIntensity * 0.65})`;
+    dynamicBoxShadow = `0 0 ${12 + glowIntensity * 24}px rgba(94, 106, 210, ${0.2 + glowIntensity * 0.45}), inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 16px 40px -8px rgba(0, 0, 0, 0.85)`;
   } else if (isTopCard && glowColor === 'rose') {
-    dynamicBorderColor = `rgba(244, 63, 94, ${0.3 + glowIntensity * 0.7})`;
-    dynamicBoxShadow = `0 0 ${15 + glowIntensity * 30}px rgba(244, 63, 94, ${0.25 + glowIntensity * 0.5}), 0 16px 36px -8px rgba(0, 0, 0, 0.8)`;
+    dynamicBorderColor = `rgba(244, 63, 94, ${0.35 + glowIntensity * 0.65})`;
+    dynamicBoxShadow = `0 0 ${12 + glowIntensity * 24}px rgba(244, 63, 94, ${0.2 + glowIntensity * 0.45}), inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 16px 40px -8px rgba(0, 0, 0, 0.85)`;
   }
 
   // Merged inline styles
@@ -106,15 +106,15 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
       data-dragging={isDragging ? 'true' : 'false'}
       tabIndex={isTopCard ? 0 : -1}
       aria-label={`Idea card: ${idea.title}`}
-      className={`relative w-full max-w-md rounded-2xl p-6 bg-gradient-to-b from-[#0e271e] via-[#091b14] to-[#040e0a] border text-mint transition-colors select-none ${className}`}
+      className={`relative w-full max-w-md rounded-2xl p-6 bg-gradient-to-b from-[#18191d] via-[#121316] to-[#0c0d0f] border text-mint transition-colors select-none ${className}`}
       style={mergedStyle}
       {...(isTopCard ? bind : {})}
     >
-      {/* Holographic light sheen corner highlight */}
+      {/* Subtle Linear top-right ambient sheen */}
       <div
-        className="absolute top-0 right-0 w-44 h-44 rounded-tr-2xl pointer-events-none opacity-40"
+        className="absolute top-0 right-0 w-44 h-44 rounded-tr-2xl pointer-events-none opacity-35"
         style={{
-          background: 'radial-gradient(circle at top right, rgba(16, 185, 129, 0.25), transparent 70%)',
+          background: 'radial-gradient(circle at top right, rgba(94, 106, 210, 0.25), transparent 70%)',
         }}
       />
 

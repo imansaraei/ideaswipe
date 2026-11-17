@@ -4,13 +4,13 @@
 
 @layer utilities {
   .border-jade-glow {
-    border-color: rgba(16, 185, 129, 0.4);
-    box-shadow: 0 0 15px rgba(16, 185, 129, 0.25);
+    border-color: rgba(94, 106, 210, 0.45);
+    box-shadow: 0 0 0 1px rgba(94, 106, 210, 0.25), 0 8px 24px -4px rgba(0, 0, 0, 0.6);
   }
 
   .border-rose-glow {
-    border-color: rgba(244, 63, 94, 0.4);
-    box-shadow: 0 0 15px rgba(244, 63, 94, 0.25);
+    border-color: rgba(244, 63, 94, 0.45);
+    box-shadow: 0 0 0 1px rgba(244, 63, 94, 0.25), 0 8px 24px -4px rgba(0, 0, 0, 0.6);
   }
 
   .font-mono-tabular {
@@ -29,9 +29,9 @@
     font-size: 10px;
     font-weight: 600;
     line-height: 1;
-    color: rgba(209, 250, 229, 0.7);
-    background-color: rgba(3, 7, 5, 0.7);
-    border: 1px solid rgba(16, 185, 129, 0.22);
+    color: rgba(228, 228, 231, 0.75);
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     border-bottom-width: 2px;
     border-radius: 0.35rem;
   }
@@ -71,7 +71,7 @@
   .bg-surface\/90,
   .bg-obsidian\/80,
   .bg-obsidian\/60 {
-    background-color: #06120d !important;
+    background-color: #0f1012 !important;
   }
 }
 
@@ -81,9 +81,10 @@
 
 body {
   margin: 0;
-  background-color: #030705;
-  color: #d1fae5;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: #08090a;
+  background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(94, 106, 210, 0.14), transparent);
+  color: #e4e4e7;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

@@ -7,34 +7,34 @@ export default {
   theme: {
     extend: {
       colors: {
-        obsidian: '#030705',
+        obsidian: '#08090a',
         surface: {
-          DEFAULT: '#06120d',
-          elevated: '#081711',
+          DEFAULT: '#0f1012',
+          elevated: '#16181c',
         },
-        card: '#0c2018',
-        well: '#122c22',
+        card: '#141518',
+        well: '#1d1f24',
         jade: {
-          DEFAULT: '#10b981',
-          focus: '#34d399',
-          muted: '#6ee7b7',
+          DEFAULT: '#5e6ad2',
+          focus: '#7c86e8',
+          muted: '#a5b4fc',
         },
         mint: {
-          DEFAULT: '#d1fae5',
-          ivory: '#f0fdf4',
+          DEFAULT: '#e4e4e7',
+          ivory: '#fafafa',
         },
         rose: {
           DEFAULT: '#f43f5e',
           pass: '#f43f5e',
         },
         cyan: {
-          DEFAULT: '#06b6d4',
-          accent: '#06b6d4',
+          DEFAULT: '#22d3ee',
+          accent: '#22d3ee',
         },
       },
       boxShadow: {
-        'jade-glow': '0 0 15px rgba(16, 185, 129, 0.25)',
-        'rose-glow': '0 0 15px rgba(244, 63, 94, 0.25)',
+        'jade-glow': '0 0 0 1px rgba(94, 106, 210, 0.35), 0 8px 24px -4px rgba(0, 0, 0, 0.6)',
+        'rose-glow': '0 0 0 1px rgba(244, 63, 94, 0.35), 0 8px 24px -4px rgba(0, 0, 0, 0.6)',
       },
       fontFamily: {
         'mono-tabular': ['JetBrains Mono', 'SF Mono', 'ui-monospace', 'Menlo', 'monospace'],

@@ -170,7 +170,7 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
     return (
       <div
         data-testid="swipe-deck-completion"
-        className={`flex flex-col items-center justify-center p-8 rounded-2xl border border-jade/40 bg-gradient-to-b from-[#0c2018] to-[#040e0a] text-center max-w-md mx-auto shadow-jade-glow ${className}`}
+        className={`flex flex-col items-center justify-center p-8 rounded-2xl border border-jade/40 bg-gradient-to-b from-[#18191d] to-[#0c0d0f] text-center max-w-md mx-auto shadow-jade-glow ${className}`}
       >
         <div className="w-16 h-16 rounded-full bg-well flex items-center justify-center text-jade mb-4 border border-jade/40 shadow-jade-glow">
           <CheckCircle2 className="w-8 h-8" />
