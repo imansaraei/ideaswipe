@@ -17,7 +17,7 @@ import {
 import { type User } from 'firebase/auth';
 import { Room } from './types';
 import { getRoom } from './services/roomService';
-import { getCurrentUser, getGuestId, onAuthStateChange, signOutUser } from './services/auth';
+import { completeEmailLinkSignIn, getCurrentUser, getGuestId, onAuthStateChange, signOutUser } from './services/auth';
 import {
   requestNotificationPermission,
   getNotificationPermission,
@@ -60,6 +60,7 @@ export const App: React.FC = () => {
     const unsub = onAuthStateChange((currentUser) => {
       setUser(currentUser);
     });
+    completeEmailLinkSignIn().catch((err) => console.warn('[Auth] Email link sign-in failed:', err));
     return () => unsub();
   }, []);
 

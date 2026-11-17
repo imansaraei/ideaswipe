@@ -5,6 +5,11 @@ import {
   onAuthStateChanged,
   signInAnonymously,
   linkWithPopup,
+  sendSignInLinkToEmail,
+  isSignInWithEmailLink,
+  signInWithEmailLink,
+  linkWithCredential,
+  EmailAuthProvider,
   signInWithCredential,
   type User,
 } from 'firebase/auth';
@@ -113,7 +118,18 @@ export async function requestEmailOtp(email: string): Promise<void> {
     throw new Error('Please enter a valid email address');
   }
 
-  // Generate 6-digit numeric OTP
+  if (isFirebaseConfigured && auth) {
+    // Real sign-in: Firebase emails a one-time link that finishes sign-in on return.
+    await sendSignInLinkToEmail(auth, cleanEmail, {
+      url: window.location.href,
+      handleCodeInApp: true,
+    });
+    localStorage.setItem(EMAIL_FOR_SIGN_IN_KEY, cleanEmail);
+    return;
+  }
+
+  // Offline demo only: generate a 6-digit OTP kept in memory
+
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   mockOtpStore.set(cleanEmail, otp);
 }
@@ -169,6 +185,7 @@ export function onAuthStateChange(callback: (user: User | null) => void): () => 
         notifySubscribers(fbUser);
       } else {
         // Guests get an anonymous Firebase account so security rules can tell voters apart.
+        if (isSignInWithEmailLink(auth!, window.location.href)) return; // completeEmailLinkSignIn handles it
         signInAnonymously(auth!).catch((err) =>
           console.warn('[Auth] Anonymous sign-in failed:', err)
         );
@@ -209,4 +226,50 @@ export function getGuestId(): string {
   } catch {
     return 'guest';
   }
+}
+
+const EMAIL_FOR_SIGN_IN_KEY = 'ideaswipe_email_for_sign_in';
+
+/** True when email sign-in sends a real link (Firebase) instead of a demo code. */
+export const usesEmailLinkSignIn = isFirebaseConfigured;
+
+/**
+ * Finishes email-link sign-in when the page was opened from the emailed link.
+ * Links to the current guest account so hosted rooms and votes are kept.
+ */
+export async function completeEmailLinkSignIn(): Promise<User | null> {
+  if (!isFirebaseConfigured || !auth || !isSignInWithEmailLink(auth, window.location.href)) {
+    return null;
+  }
+  await auth.authStateReady();
+  const link = window.location.href;
+  const email =
+    localStorage.getItem(EMAIL_FOR_SIGN_IN_KEY) ||
+    window.prompt('Confirm your email to finish signing in') ||
+    '';
+
+  // Strip the one-time sign-in params but keep the room code.
+  const url = new URL(link);
+  ['apiKey', 'oobCode', 'mode', 'lang', 'continueUrl'].forEach((k) => url.searchParams.delete(k));
+  window.history.replaceState(null, '', url.toString());
+
+  if (!email) {
+    if (!auth.currentUser) await signInAnonymously(auth);
+    return null;
+  }
+  const credential = EmailAuthProvider.credentialWithLink(email, link);
+  let user: User;
+  if (auth.currentUser?.isAnonymous) {
+    try {
+      user = (await linkWithCredential(auth.currentUser, credential)).user;
+    } catch (err: any) {
+      if (err?.code !== 'auth/email-already-in-use' && err?.code !== 'auth/credential-already-in-use') throw err;
+      user = (await signInWithEmailLink(auth, email, link)).user;
+    }
+  } else {
+    user = (await signInWithEmailLink(auth, email, link)).user;
+  }
+  localStorage.removeItem(EMAIL_FOR_SIGN_IN_KEY);
+  notifySubscribers(user);
+  return user;
 }
