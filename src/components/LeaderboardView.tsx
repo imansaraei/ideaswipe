@@ -120,9 +120,9 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
               <div className="text-right">
                 <div className="text-[10px] uppercase font-semibold text-mint/50">Participation</div>
                 <div data-testid="participation-stats" className="text-xs font-mono-tabular font-medium text-mint-ivory">
-                  <span>{effectiveParticipantCount} members</span>
+                  <span>{effectiveParticipantCount} {effectiveParticipantCount === 1 ? 'member' : 'members'}</span>
                   {effectiveTotalVotes > 0 && (
-                    <span className="text-mint/60"> • {effectiveTotalVotes} votes</span>
+                    <span className="text-mint/60"> • {effectiveTotalVotes} {effectiveTotalVotes === 1 ? 'vote' : 'votes'}</span>
                   )}
                 </div>
               </div>
@@ -156,8 +156,8 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
         ) : (
           rankedChampions.map((idea, index) => {
             const rank = index + 1;
-            const isCrown = rank === 1;
             const likes = idea.likesCount || 0;
+            const isCrown = rank === 1 && likes > 0;
             const passes = idea.passesCount || 0;
             const total = likes + passes;
             const percent = total > 0 ? Math.round((likes / total) * 100) : Math.round((idea.score || 0) * 100);

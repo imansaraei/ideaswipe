@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isHost(roomId) {
+      return signedIn() && get(/databases/$(database)/documents/rooms/$(roomId)).data.hostUserId == request.auth.uid;
+    }
+    // Only the vote counters move, and each by exactly one.
+    function isVoteCountChange() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let likeDelta = request.resource.data.get('likesCount', 0) - resource.data.get('likesCount', 0);
+      let passDelta = request.resource.data.get('passesCount', 0) - resource.data.get('passesCount', 0);
+      return changed.hasOnly(['likesCount', 'passesCount', 'updatedAt'])
+        && ((changed.hasAny(['likesCount']) && (likeDelta == 1 || likeDelta == -1) && passDelta == 0)
+         || (changed.hasAny(['passesCount']) && (passDelta == 1 || passDelta == -1) && likeDelta == 0));
+    }
+
+    match /rooms/{roomId} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.hostUserId == request.auth.uid;
+      allow update: if isHost(roomId)
+        && request.resource.data.hostUserId == resource.data.hostUserId;
+      allow delete: if isHost(roomId);
+
+      match /ideas/{ideaId} {
+        allow read: if true;
+        allow create, delete: if isHost(roomId);
+        allow update: if isHost(roomId) || (signedIn() && isVoteCountChange());
+      }
+
+      match /swipes/{swipeId} {
+        allow read: if true;
+        allow create: if signedIn()
+          && request.resource.data.userId == request.auth.uid
+          && swipeId == request.auth.uid + '_' + request.resource.data.ideaId;
+        allow delete: if signedIn() && resource.data.userId == request.auth.uid;
+        allow update: if false;
+      }
+    }
+
+    match /users/{userId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

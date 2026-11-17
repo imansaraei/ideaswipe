@@ -9,6 +9,8 @@ import {
   syncGoogleDoc,
   toggleIdeaStatus,
   recordSwipe,
+  removeSwipe,
+  addIdea,
   shuffleRoom,
   resetMockRoomStoreForTesting,
   GOOGLE_DOC_MARKDOWN_TEMPLATE,
@@ -345,9 +347,9 @@ describe('HostDashboard Component', () => {
     expect(codeElem.className).toContain('font-mono-tabular');
 
     // Stats
-    expect(screen.getByText(/1 Active/i)).toBeDefined();
-    expect(screen.getByText(/1 in Pot/i)).toBeDefined();
-    expect(screen.getByText(/1 Archived/i)).toBeDefined();
+    expect(screen.getByRole('tab', { name: /Active\s*1/i })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /The Pot\s*1/i })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /Archived\s*1/i })).toBeDefined();
 
     // Default view shows Pot tab
     expect(screen.getByText('Smart Mirror')).toBeDefined();
@@ -572,5 +574,36 @@ describe('shuffleRoom Service', () => {
 
     // Next challengers picked from available pot (I-003 and I-002)
     expect(shuffle2.nextChallengers.length).toBeGreaterThan(0);
+  });
+});
+
+describe('removeSwipe (Undo)', () => {
+  beforeEach(() => resetMockRoomStoreForTesting());
+
+  it('removes the vote and lets the user vote again', async () => {
+    const room = await createRoom('host_undo', 'Undo Test');
+    const idea = await addIdea(room.id, { title: 'Undo me', oneLiner: 'Test' });
+    await recordSwipe(room.id, 'u1', idea.id, 'like');
+    await removeSwipe(room.id, 'u1', idea.id);
+    await recordSwipe(room.id, 'u1', idea.id, 'pass');
+    const [after] = await getRoomIdeas(room.id);
+    expect(after.likesCount).toBe(0);
+    expect(after.passesCount).toBe(1);
+  });
+});
+
+describe('syncGoogleDoc code collisions', () => {
+  beforeEach(() => resetMockRoomStoreForTesting());
+
+  it('does not copy votes from a manual idea that shares a code with a doc idea', async () => {
+    const room = await createRoom('host_sync', 'Sync Collision');
+    const manual = await addIdea(room.id, { title: 'Manual', oneLiner: 'x' });
+    await recordSwipe(room.id, 'u1', manual.id, 'like');
+    await syncGoogleDoc(room.id, 'doc123', GOOGLE_DOC_MARKDOWN_TEMPLATE);
+    const ideas = await getRoomIdeas(room.id);
+    const fromDoc = ideas.find((i) => i.id !== manual.id)!;
+    expect(ideas).toHaveLength(2);
+    expect(fromDoc.likesCount).toBe(0);
+    expect(ideas.find((i) => i.id === manual.id)!.likesCount).toBe(1);
   });
 });

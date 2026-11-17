@@ -131,7 +131,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
         status: 'pot',
       });
 
-      setIdeas((prev) => [...prev, added]);
+      setIdeas((prev) => (prev.some((i) => i.id === added.id) ? prev : [...prev, added]));
       setNewTitle('');
       setNewOneLiner('');
       setNewCategory('General');
@@ -266,13 +266,13 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
       <div
         role="tablist"
         aria-label="Idea curation categories"
-        className="grid grid-cols-3 gap-3 p-1.5 bg-surface rounded-2xl border border-jade/20"
+        className="grid grid-cols-3 gap-1.5 sm:gap-3 p-1.5 bg-surface rounded-2xl border border-jade/20"
       >
         <button
           role="tab"
           aria-selected={activeTab === 'pot'}
           onClick={() => setActiveTab('pot')}
-          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl transition-all font-medium text-sm active:scale-98 cursor-pointer ${
+          className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2.5 sm:py-3 px-1 sm:px-4 rounded-xl transition-all font-medium text-xs sm:text-sm active:scale-98 cursor-pointer ${
             activeTab === 'pot'
               ? 'bg-card border border-jade/40 text-mint-ivory shadow-sm'
               : 'text-mint/60 hover:text-mint hover:bg-card/40'
@@ -281,7 +281,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
           <Layers className="w-4 h-4 text-jade" />
           <span>The Pot</span>
           <span className="px-2 py-0.5 rounded-full bg-well text-xs font-mono-tabular text-jade">
-            {potIdeas.length} in Pot
+            {potIdeas.length}
           </span>
         </button>
 
@@ -289,16 +289,16 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
           role="tab"
           aria-selected={activeTab === 'active'}
           onClick={() => setActiveTab('active')}
-          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl transition-all font-medium text-sm active:scale-98 cursor-pointer ${
+          className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2.5 sm:py-3 px-1 sm:px-4 rounded-xl transition-all font-medium text-xs sm:text-sm active:scale-98 cursor-pointer ${
             activeTab === 'active'
               ? 'bg-card border border-jade/40 text-mint-ivory shadow-sm'
               : 'text-mint/60 hover:text-mint hover:bg-card/40'
           }`}
         >
           <Flame className="w-4 h-4 text-rose" />
-          <span>Active Challengers</span>
+          <span>Active</span>
           <span className="px-2 py-0.5 rounded-full bg-well text-xs font-mono-tabular text-rose">
-            {activeIdeas.length} Active
+            {activeIdeas.length}
           </span>
         </button>
 
@@ -306,7 +306,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
           role="tab"
           aria-selected={activeTab === 'archived'}
           onClick={() => setActiveTab('archived')}
-          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl transition-all font-medium text-sm active:scale-98 cursor-pointer ${
+          className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2.5 sm:py-3 px-1 sm:px-4 rounded-xl transition-all font-medium text-xs sm:text-sm active:scale-98 cursor-pointer ${
             activeTab === 'archived'
               ? 'bg-card border border-jade/40 text-mint-ivory shadow-sm'
               : 'text-mint/60 hover:text-mint hover:bg-card/40'
@@ -315,7 +315,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
           <Archive className="w-4 h-4 text-mint/40" />
           <span>Archived</span>
           <span className="px-2 py-0.5 rounded-full bg-well text-xs font-mono-tabular text-mint/60">
-            {archivedIdeas.length} Archived
+            {archivedIdeas.length}
           </span>
         </button>
       </div>
@@ -338,7 +338,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
                 : 'Ideas you drop or archive will be kept here safely for future retrieval.'}
             </p>
             {activeTab === 'pot' && (
-              <div className="flex items-center justify-center gap-2 mt-2">
+              <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(true)}

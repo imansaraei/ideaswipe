@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
+import { initializeFirestore, type Firestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env?.VITE_FIREBASE_API_KEY,
@@ -30,7 +30,8 @@ if (isFirebaseConfigured) {
   try {
     app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
     auth = getAuth(app);
-    db = getFirestore(app);
+    // Optional idea fields (e.g. problemStatement) may be undefined; Firestore rejects those by default.
+    db = initializeFirestore(app, { ignoreUndefinedProperties: true });
   } catch (error) {
     console.warn('[Firebase] Initialization failed, falling back to offline mode:', error);
     app = null;

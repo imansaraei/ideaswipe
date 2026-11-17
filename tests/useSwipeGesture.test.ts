@@ -362,7 +362,7 @@ describe('SwipeDeck Component', () => {
     }, { timeout: 3000 });
   });
 
-  it('shows completion screen and invokes onFinish after all cards are rated', async () => {
+  it('shows completion screen after all cards are rated and invokes onFinish from its button', async () => {
     const onSwipe = vi.fn();
     const onFinish = vi.fn();
     render(
@@ -384,7 +384,7 @@ describe('SwipeDeck Component', () => {
     fireEvent.click(screen.getByTestId('swipe-pass-button'));
     await waitFor(() => {
       expect(onSwipe).toHaveBeenCalledWith('idea_2', 'pass');
-      expect(onFinish).toHaveBeenCalled();
+      expect(onFinish).not.toHaveBeenCalled();
       expect(screen.getByTestId('swipe-deck-completion')).toBeDefined();
       expect(screen.getByText("You're All Caught Up!")).toBeDefined();
     }, { timeout: 3000 });
@@ -392,7 +392,19 @@ describe('SwipeDeck Component', () => {
     // Click finish leaderboard button
     const finishBtn = screen.getByTestId('swipe-deck-finish-button');
     fireEvent.click(finishBtn);
-    expect(onFinish).toHaveBeenCalledTimes(2);
+    expect(onFinish).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps position when the same batch arrives re-ordered mid-round', async () => {
+    const ideas = sampleIdeas.slice(0, 2);
+    const { rerender } = render(React.createElement(SwipeDeck, { ideas }));
+    fireEvent.click(screen.getByTestId('swipe-like-button'));
+    await waitFor(() => {
+      expect(screen.getByTestId('swipe-counter-badge').textContent).toContain('Card2of2');
+    }, { timeout: 3000 });
+    rerender(React.createElement(SwipeDeck, { ideas: [...ideas].reverse() }));
+    expect(screen.getByTestId('swipe-counter-badge').textContent).toContain('Card2of2');
+    expect(screen.getByText(ideas[1].title)).toBeDefined();
   });
 });
 
@@ -597,3 +609,4 @@ describe('recordSwipe Helper (Offline / Mock Fallback)', () => {
     expect(screen.getByText('Third')).toBeDefined();
   });
 });
+

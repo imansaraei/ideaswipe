@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { Idea } from '../types';
 import { SwipeDirection } from '../hooks/useSwipeGesture';
 import { SwipeCard } from './SwipeCard';
-import { recordSwipe } from '../services/roomService';
+import { recordSwipe, removeSwipe } from '../services/roomService';
 import { CheckCircle2, Sparkles, ArrowRight, Layers, RotateCcw } from 'lucide-react';
 
 export { recordSwipe };
@@ -46,7 +46,12 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
 
   // Snapshot initial swiped set so reactive background swipe updates do not double-advance currentIndex
   const initialSwipedSnapshot = useRef<Set<string> | null>(null);
-  const ideasKey = useMemo(() => ideas.map((i) => i.id).join(','), [ideas]);
+  // Order-independent key: vote counts can re-rank the batch mid-round, which must not reset the deck.
+  const ideasKey = useMemo(() => ideas.map((i) => i.id).sort().join(','), [ideas]);
+  const roundOrder = useRef<{ key: string; ids: string[] } | null>(null);
+  if (roundOrder.current?.key !== ideasKey) {
+    roundOrder.current = { key: ideasKey, ids: ideas.map((i) => i.id) };
+  }
 
   useEffect(() => {
     initialSwipedSnapshot.current = null;
@@ -61,8 +66,10 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
 
   const effectiveIdeas = useMemo(() => {
     const filterSet = initialSwipedSnapshot.current;
-    if (!filterSet || filterSet.size === 0) return ideas;
-    return ideas.filter((idea) => !filterSet.has(idea.id));
+    const byId = new Map(ideas.map((i) => [i.id, i]));
+    const ordered = roundOrder.current!.ids.map((id) => byId.get(id)!).filter(Boolean);
+    if (!filterSet || filterSet.size === 0) return ordered;
+    return ordered.filter((idea) => !filterSet.has(idea.id));
   }, [ideas, ideasKey]);
 
   const isRoundAlreadyCompleted =
@@ -79,13 +86,7 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
       setTopCardProgress(0);
 
       // Optimistically advance card immediately so 60fps gesture transition is seamless
-      setCurrentIndex((prev) => {
-        const nextIndex = prev + 1;
-        if (nextIndex >= totalCards) {
-          onFinish?.();
-        }
-        return nextIndex;
-      });
+      setCurrentIndex((prev) => prev + 1);
 
       // Background write without blocking UI or animation
       if (roomId && userId) {
@@ -101,15 +102,21 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
         console.warn('[SwipeDeck] onSwipe error:', err);
       }
     },
-    [roomId, userId, onSwipe, totalCards, onFinish]
+    [roomId, userId, onSwipe]
   );
 
   const handleUndo = useCallback(() => {
     if (currentIndex <= 0 || swipeHistory.length === 0) return;
+    const last = swipeHistory[swipeHistory.length - 1];
+    if (roomId && userId) {
+      removeSwipe(roomId, userId, last.ideaId).catch((err) => {
+        console.warn('[SwipeDeck] Failed to undo vote:', err);
+      });
+    }
     setSwipeHistory((prev) => prev.slice(0, -1));
     setCurrentIndex((prev) => Math.max(0, prev - 1));
     setTopCardProgress(0);
-  }, [currentIndex, swipeHistory.length]);
+  }, [currentIndex, swipeHistory, roomId, userId]);
 
   // Empty state
   if (isEmpty) {

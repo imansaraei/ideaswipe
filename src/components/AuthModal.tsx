@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { type User } from 'firebase/auth';
 import { X, Mail, KeyRound, Loader2, ArrowLeft } from 'lucide-react';
-import { signInWithGoogle, requestEmailOtp, verifyEmailOtp } from '../services/auth';
+import { signInWithGoogle, requestEmailOtp, verifyEmailOtp, usesEmailLinkSignIn } from '../services/auth';
 
 export interface AuthModalProps {
   isOpen: boolean;
@@ -18,7 +18,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   title = 'Join the Consensus',
   description = 'Sign in to swipe on ideas and view group leaderboards.',
 }) => {
-  const [step, setStep] = useState<'email' | 'otp'>('email');
+  const [step, setStep] = useState<'email' | 'otp' | 'sent'>('email');
   const [email, setEmail] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -70,7 +70,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setError(null);
     try {
       await requestEmailOtp(email.trim());
-      setStep('otp');
+      setStep(usesEmailLinkSignIn ? 'sent' : 'otp');
     } catch (err: any) {
       setError(err?.message || 'Failed to send verification code. Please check your email.');
     } finally {
@@ -213,10 +213,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 {isLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  <span>Send 6-Digit Code</span>
+                  <span>{usesEmailLinkSignIn ? 'Email Me a Sign-In Link' : 'Send 6-Digit Code'}</span>
                 )}
               </button>
             </form>
+          </div>
+        ) : step === 'sent' ? (
+          <div className="space-y-4 text-center" role="status">
+            <Mail className="w-8 h-8 mx-auto text-jade" />
+            <p className="text-sm text-mint/80">
+              We sent a sign-in link to <strong className="text-mint-ivory">{email.trim()}</strong>.
+              Open it on this device to finish signing in.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setStep('email');
+                setError(null);
+              }}
+              className="inline-flex items-center text-xs text-jade hover:text-jade-focus transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+              <span>Use a different email</span>
+            </button>
           </div>
         ) : (
           /* Step: OTP Verification Form */

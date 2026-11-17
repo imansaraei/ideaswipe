@@ -106,10 +106,15 @@ export async function createRoom(
   if (isFirebaseConfigured && db) {
     try {
       const roomRef = doc(db, 'rooms', id);
-      await setDoc(roomRef, room);
+      await Promise.race([
+        setDoc(roomRef, room),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
+      ]);
       return room;
     } catch (err) {
-      console.warn('[RoomService] Firebase save failed, falling back to mock store:', err);
+      // A room saved only in this browser can't be joined by anyone else, so fail loudly.
+      console.warn('[RoomService] Firebase createRoom failed:', err);
+      throw new Error("Couldn't create the room. Check your connection and try again.");
     }
   }
 
@@ -238,13 +243,10 @@ export async function syncGoogleDoc(
       existingSnap.docs.forEach((d) => {
         const data = d.data() as Idea;
         existingMap.set(data.id, data);
-        if (data.code) {
-          existingMap.set(data.code.toUpperCase(), data);
-        }
       });
 
       for (const idea of parsedIdeas) {
-        const prev = existingMap.get(idea.id) || (idea.code ? existingMap.get(idea.code.toUpperCase()) : undefined);
+        const prev = existingMap.get(idea.id);
         const mergedIdea: Idea = prev
           ? {
               ...idea,
@@ -270,18 +272,15 @@ export async function syncGoogleDoc(
     room.googleDoc = googleDocConfig;
   }
 
-  // Merge ideas: keep existing score/likes/passes if idea code or id already exists
+  // Merge ideas by id only: a manually added idea can share a code with a doc idea.
   const existing = mockIdeasByRoom.get(roomId) || [];
   const existingMap = new Map<string, Idea>();
   existing.forEach((i) => {
     existingMap.set(i.id, i);
-    if (i.code) {
-      existingMap.set(i.code.toUpperCase(), i);
-    }
   });
 
   const merged = parsedIdeas.map((newIdea) => {
-    const prev = existingMap.get(newIdea.id) || (newIdea.code ? existingMap.get(newIdea.code.toUpperCase()) : undefined);
+    const prev = existingMap.get(newIdea.id);
     if (prev) {
       return {
         ...newIdea,
@@ -295,10 +294,9 @@ export async function syncGoogleDoc(
   });
 
   // Retain any existing ideas that weren't in the incoming doc
-  const incomingCodes = new Set(parsedIdeas.map((i) => i.code.toUpperCase()));
   const incomingIds = new Set(parsedIdeas.map((i) => i.id));
   for (const prev of existing) {
-    if (!incomingCodes.has(prev.code.toUpperCase()) && !incomingIds.has(prev.id)) {
+    if (!incomingIds.has(prev.id)) {
       merged.push(prev);
     }
   }
@@ -465,6 +463,51 @@ export async function recordSwipe(
 
   notifyRoomUpdated(roomId);
   return swipe;
+}
+
+/**
+ * Removes a user's vote on an idea (used by Undo) and reverses its counter.
+ */
+export async function removeSwipe(roomId: string, userId: string, ideaId: string): Promise<void> {
+  const swipeId = `${userId}_${ideaId}`;
+
+  if (isFirebaseConfigured && db) {
+    try {
+      const swipeRef = doc(db, 'rooms', roomId, 'swipes', swipeId);
+      const existingSnap = await getDoc(swipeRef);
+      if (!existingSnap.exists()) return;
+      const { vote } = existingSnap.data() as Swipe;
+      const batch = writeBatch(db);
+      batch.delete(swipeRef);
+      batch.update(doc(db, 'rooms', roomId, 'ideas', ideaId), {
+        [vote === 'like' ? 'likesCount' : 'passesCount']: increment(-1),
+        updatedAt: Date.now(),
+      });
+      await batch.commit();
+      return;
+    } catch (err) {
+      console.warn('[RoomService] Firebase removeSwipe failed, falling back to mock store:', err);
+    }
+  }
+
+  const mockKey = `${roomId}_${swipeId}`;
+  const existing = mockSwipes.get(mockKey);
+  if (!existing) return;
+  mockSwipes.delete(mockKey);
+
+  const targetIdea = (mockIdeasByRoom.get(roomId) || []).find((i) => i.id === ideaId);
+  if (targetIdea) {
+    if (existing.vote === 'like') {
+      targetIdea.likesCount = Math.max(0, (targetIdea.likesCount || 0) - 1);
+    } else {
+      targetIdea.passesCount = Math.max(0, (targetIdea.passesCount || 0) - 1);
+    }
+    const total = (targetIdea.likesCount || 0) + (targetIdea.passesCount || 0);
+    targetIdea.score = total > 0 ? (targetIdea.likesCount || 0) / total : 0;
+    targetIdea.updatedAt = Date.now();
+  }
+
+  notifyRoomUpdated(roomId);
 }
 
 /**
