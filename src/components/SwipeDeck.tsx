@@ -118,6 +118,24 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
     setTopCardProgress(0);
   }, [currentIndex, swipeHistory, roomId, userId]);
 
+  // Linear/Raycast-style keyboard shortcut for Undo (Z or Backspace)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        return;
+      }
+      if ((e.key === 'z' || e.key === 'Z' || e.key === 'Backspace') && !e.metaKey && !e.ctrlKey) {
+        if (currentIndex > 0 && swipeHistory.length > 0) {
+          e.preventDefault();
+          handleUndo();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentIndex, swipeHistory.length, handleUndo]);
+
   // Empty state
   if (isEmpty) {
     return (
@@ -300,6 +318,28 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
             );
           })
           .reverse()}
+      </div>
+
+      {/* Linear/Raycast-style Keyboard Shortcut Hint Bar */}
+      <div className="hidden sm:flex items-center justify-center gap-4 mt-4 text-[11px] text-mint/50">
+        <span className="inline-flex items-center gap-1.5">
+          <kbd className="kbd-cap">←</kbd>
+          <span>Pass</span>
+        </span>
+        <span className="text-jade/30">·</span>
+        <span className="inline-flex items-center gap-1.5">
+          <kbd className="kbd-cap">→</kbd>
+          <span>Match</span>
+        </span>
+        {currentIndex > 0 && swipeHistory.length > 0 && (
+          <>
+            <span className="text-jade/30">·</span>
+            <span className="inline-flex items-center gap-1.5">
+              <kbd className="kbd-cap">Z</kbd>
+              <span>Undo</span>
+            </span>
+          </>
+        )}
       </div>
     </div>
   );

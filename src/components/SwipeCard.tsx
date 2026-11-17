@@ -191,7 +191,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
 
       {/* Accessible Action Buttons */}
       {showActions && isTopCard && (
-        <div className="mt-6 pt-4 border-t border-jade/20 flex items-center justify-between gap-4">
+        <div className="mt-6 pt-4 border-t border-jade/15 flex items-center justify-between gap-3">
           <button
             type="button"
             data-testid="swipe-pass-button"
@@ -201,10 +201,13 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
               e.stopPropagation();
               triggerSwipe('pass');
             }}
-            className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-rose/30 bg-rose/10 hover:bg-rose/20 text-rose font-medium text-sm transition-all focus:outline-none focus:ring-2 focus:ring-rose/40 disabled:opacity-50 cursor-pointer active:scale-95"
+            className="flex-1 inline-flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl border border-rose/25 bg-rose/10 hover:bg-rose/20 text-rose font-medium text-sm transition-all focus:outline-none focus:ring-2 focus:ring-rose/40 disabled:opacity-50 cursor-pointer active:scale-95"
           >
-            <X className="w-4 h-4" />
-            <span>Pass</span>
+            <span className="inline-flex items-center gap-2">
+              <X className="w-4 h-4" />
+              <span>Pass</span>
+            </span>
+            <kbd className="kbd-cap hidden sm:inline-flex text-rose/80 border-rose/30">←</kbd>
           </button>
 
           <button
@@ -216,10 +219,13 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
               e.stopPropagation();
               triggerSwipe('like');
             }}
-            className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-jade/40 bg-jade/15 hover:bg-jade/25 text-jade font-semibold text-sm transition-all focus:outline-none focus:ring-2 focus:ring-jade/50 shadow-jade-glow disabled:opacity-50 cursor-pointer active:scale-95"
+            className="flex-1 inline-flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl border border-jade/35 bg-jade/15 hover:bg-jade/25 text-jade font-semibold text-sm transition-all focus:outline-none focus:ring-2 focus:ring-jade/50 shadow-jade-glow disabled:opacity-50 cursor-pointer active:scale-95"
           >
-            <Check className="w-4 h-4" />
-            <span>Match</span>
+            <span className="inline-flex items-center gap-2">
+              <Check className="w-4 h-4" />
+              <span>Match</span>
+            </span>
+            <kbd className="kbd-cap hidden sm:inline-flex text-jade border-jade/40">→</kbd>
           </button>
         </div>
       )}
