@@ -7,6 +7,7 @@ export interface SwipeCardProps {
   idea: Idea;
   isTopCard?: boolean;
   onSwipe?: (direction: SwipeDirection) => void;
+  onDragProgress?: (progress: number, dx: number) => void;
   threshold?: number;
   disabled?: boolean;
   className?: string;
@@ -23,6 +24,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
   idea,
   isTopCard = true,
   onSwipe,
+  onDragProgress,
   threshold = 100,
   disabled = false,
   className = '',
@@ -44,6 +46,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
     threshold,
     disabled: !isTopCard || disabled,
     onSwipe,
+    onDragProgress: isTopCard ? onDragProgress : undefined,
   });
 
   // Keyboard navigation for active top card
@@ -143,12 +146,12 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
       <div className="flex items-center justify-between gap-2 mb-4">
         <span
           data-testid="idea-code-badge"
-          className="font-mono-tabular text-xs font-semibold px-2.5 py-1 rounded-md bg-emerald-950/90 text-emerald-400 border border-emerald-800/60 tracking-wide"
+          className="font-mono-tabular text-xs font-semibold px-2.5 py-1 rounded-md bg-well text-jade border border-jade/30 tracking-wide"
         >
           {idea.code || 'IDEA'}
         </span>
 
-        <div className="flex items-center gap-1.5 text-xs text-mint/80 bg-surface/90 px-2.5 py-1 rounded-full border border-emerald-900/40">
+        <div className="flex items-center gap-1.5 text-xs text-mint/80 bg-surface/90 px-2.5 py-1 rounded-full border border-jade/20">
           <Tag className="w-3 h-3 text-jade" />
           <span>{idea.category || 'General'}</span>
         </div>
@@ -166,8 +169,8 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
 
       {/* Problem Statement if available */}
       {idea.problemStatement && (
-        <div className="mb-3.5 p-3 rounded-xl bg-obsidian/60 border border-emerald-900/30 text-xs text-mint/75 leading-relaxed">
-          <div className="flex items-center gap-1.5 font-semibold text-emerald-400 mb-1">
+        <div className="mb-3.5 p-3 rounded-xl bg-obsidian/60 border border-jade/20 text-xs text-mint/75 leading-relaxed">
+          <div className="flex items-center gap-1.5 font-semibold text-jade mb-1">
             <Lightbulb className="w-3.5 h-3.5 text-jade" />
             <span>Problem</span>
           </div>
@@ -177,8 +180,8 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
 
       {/* Target Audience if available */}
       {idea.targetAudience && (
-        <div className="mb-4 p-3 rounded-xl bg-obsidian/60 border border-emerald-900/30 text-xs text-mint/75 leading-relaxed">
-          <div className="flex items-center gap-1.5 font-semibold text-emerald-400 mb-1">
+        <div className="mb-4 p-3 rounded-xl bg-obsidian/60 border border-jade/20 text-xs text-mint/75 leading-relaxed">
+          <div className="flex items-center gap-1.5 font-semibold text-jade mb-1">
             <Target className="w-3.5 h-3.5 text-cyan-accent" />
             <span>Target Audience</span>
           </div>
@@ -188,7 +191,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
 
       {/* Accessible Action Buttons */}
       {showActions && isTopCard && (
-        <div className="mt-6 pt-4 border-t border-emerald-900/40 flex items-center justify-between gap-4">
+        <div className="mt-6 pt-4 border-t border-jade/20 flex items-center justify-between gap-4">
           <button
             type="button"
             data-testid="swipe-pass-button"

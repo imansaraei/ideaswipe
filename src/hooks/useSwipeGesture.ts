@@ -28,6 +28,7 @@ export interface UseSwipeGestureOptions {
   maxRotation?: number;
   disabled?: boolean;
   onSwipe?: (direction: SwipeDirection) => void;
+  onDragProgress?: (progress: number, dx: number) => void;
 }
 
 export interface SwipeGestureState {
@@ -50,8 +51,16 @@ export interface SwipeGestureState {
   style: CSSProperties;
 }
 
+interface PointerSample {
+  x: number;
+  y: number;
+  time: number;
+}
+
 /**
  * Hook for 60fps hardware-accelerated pointer swipe gestures on cards.
+ * Incorporates Apple-style physics: release velocity tracking, momentum projection,
+ * direction verification, haptic cues, reduced-motion awareness, and pan-y at rest.
  */
 export function useSwipeGesture(options: UseSwipeGestureOptions = {}): SwipeGestureState {
   const {
@@ -59,6 +68,7 @@ export function useSwipeGesture(options: UseSwipeGestureOptions = {}): SwipeGest
     maxRotation = 15,
     disabled = false,
     onSwipe,
+    onDragProgress,
   } = options;
 
   const [dx, setDx] = useState(0);
@@ -68,7 +78,9 @@ export function useSwipeGesture(options: UseSwipeGestureOptions = {}): SwipeGest
 
   const startPointRef = useRef<{ x: number; y: number } | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
+  const samplesRef = useRef<PointerSample[]>([]);
   const isMountedRef = useRef(true);
+  const prevDecisionRef = useRef<SwipeDirection | null>(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -84,7 +96,9 @@ export function useSwipeGesture(options: UseSwipeGestureOptions = {}): SwipeGest
     setIsAnimating(false);
     startPointRef.current = null;
     activePointerIdRef.current = null;
-  }, []);
+    samplesRef.current = [];
+    onDragProgress?.(0, 0);
+  }, [onDragProgress]);
 
   const triggerSwipe = useCallback(
     async (direction: SwipeDirection): Promise<void> => {
@@ -94,6 +108,7 @@ export function useSwipeGesture(options: UseSwipeGestureOptions = {}): SwipeGest
       const targetDx = direction === 'like' ? 650 : -650;
       setDx(targetDx);
       setDy(0);
+      onDragProgress?.(1, targetDx);
 
       await new Promise((resolve) => setTimeout(resolve, 220));
 
@@ -102,7 +117,7 @@ export function useSwipeGesture(options: UseSwipeGestureOptions = {}): SwipeGest
         resetPosition();
       }
     },
-    [disabled, isAnimating, onSwipe, resetPosition]
+    [disabled, isAnimating, onSwipe, resetPosition, onDragProgress]
   );
 
   const onPointerDown = useCallback(
@@ -114,11 +129,12 @@ export function useSwipeGesture(options: UseSwipeGestureOptions = {}): SwipeGest
       try {
         e.currentTarget.setPointerCapture?.(e.pointerId);
       } catch {
-        // Safe fallback if pointer capture fails in test or restricted environments
+        // Safe fallback in test or restricted environments
       }
 
       activePointerIdRef.current = e.pointerId;
       startPointRef.current = { x: e.clientX, y: e.clientY };
+      samplesRef.current = [{ x: e.clientX, y: e.clientY, time: performance.now() }];
       setIsDragging(true);
     },
     [disabled, isAnimating]
@@ -134,10 +150,18 @@ export function useSwipeGesture(options: UseSwipeGestureOptions = {}): SwipeGest
       const currentDx = e.clientX - startPointRef.current.x;
       const currentDy = e.clientY - startPointRef.current.y;
 
+      const now = performance.now();
+      samplesRef.current.push({ x: e.clientX, y: e.clientY, time: now });
+      // Keep only samples from last 120ms for instant velocity responsiveness
+      if (samplesRef.current.length > 8) {
+        samplesRef.current = samplesRef.current.slice(-8);
+      }
+
       setDx(currentDx);
       setDy(currentDy);
+      onDragProgress?.(Math.min(1, Math.abs(currentDx) / threshold), currentDx);
     },
-    [isDragging]
+    [isDragging, threshold, onDragProgress]
   );
 
   const onPointerEnd = useCallback(
@@ -155,17 +179,47 @@ export function useSwipeGesture(options: UseSwipeGestureOptions = {}): SwipeGest
       setIsDragging(false);
       activePointerIdRef.current = null;
 
-      const decision = calculateSwipeDecision(dx, dy, threshold);
+      // Calculate release velocity from recent history
+      const now = performance.now();
+      const recent = samplesRef.current.filter((s) => now - s.time <= 120);
+      let vx = 0; // px / sec
+      if (recent.length >= 2) {
+        const first = recent[0];
+        const last = recent[recent.length - 1];
+        const dt = (last.time - first.time) / 1000;
+        if (dt > 0.005) {
+          vx = (last.x - first.x) / dt;
+        }
+      }
+
+      // Momentum projection: resting position = dx + vx * 0.18
+      const projectedDx = dx + vx * 0.18;
+
+      // Determine decision:
+      // 1. Direct displacement past threshold (and release velocity doesn't strongly oppose)
+      // 2. High velocity flick where projectedDx crosses threshold and user moved in that direction
+      let decision: SwipeDirection | null = null;
+
+      if (dx >= threshold && vx >= -200) {
+        decision = 'like';
+      } else if (dx <= -threshold && vx <= 200) {
+        decision = 'pass';
+      } else if (projectedDx >= threshold && dx > 20 && vx > 350) {
+        decision = 'like';
+      } else if (projectedDx <= -threshold && dx < -20 && vx < -350) {
+        decision = 'pass';
+      }
 
       if (decision) {
         // Flyout animation past screen boundary
         setIsAnimating(true);
         const flyoutDx = decision === 'like' ? 700 : -700;
         setDx(flyoutDx);
+        onDragProgress?.(1, flyoutDx);
 
         setTimeout(() => {
           if (isMountedRef.current) {
-            onSwipe?.(decision);
+            onSwipe?.(decision as SwipeDirection);
             resetPosition();
           }
         }, 200);
@@ -174,9 +228,11 @@ export function useSwipeGesture(options: UseSwipeGestureOptions = {}): SwipeGest
         setDx(0);
         setDy(0);
         startPointRef.current = null;
+        samplesRef.current = [];
+        onDragProgress?.(0, 0);
       }
     },
-    [isDragging, dx, dy, threshold, onSwipe, resetPosition]
+    [isDragging, dx, threshold, onSwipe, resetPosition, onDragProgress]
   );
 
   // Compute rotation proportional to horizontal drag distance
@@ -187,11 +243,25 @@ export function useSwipeGesture(options: UseSwipeGestureOptions = {}): SwipeGest
   const glowColor: 'jade' | 'rose' | null = dx > 0 ? 'jade' : dx < 0 ? 'rose' : null;
   const decision = calculateSwipeDecision(dx, dy, threshold);
 
+  // Haptic feedback tick when crossing threshold
+  useEffect(() => {
+    if (decision && decision !== prevDecisionRef.current) {
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        try {
+          navigator.vibrate(10);
+        } catch {
+          // Ignore vibration error
+        }
+      }
+    }
+    prevDecisionRef.current = decision;
+  }, [decision]);
+
   const style: CSSProperties = {
     transform: `translate3d(${dx}px, ${dy}px, 0) rotate(${rotation}deg)`,
     transition: isDragging ? 'none' : 'transform 240ms cubic-bezier(0.16, 1, 0.3, 1)',
     willChange: 'transform',
-    touchAction: 'none',
+    touchAction: isDragging ? 'none' : 'pan-y',
     userSelect: 'none',
   };
 

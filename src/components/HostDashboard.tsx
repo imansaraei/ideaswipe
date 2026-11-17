@@ -11,9 +11,11 @@ import {
   Sparkles,
   Shuffle,
   Loader2,
+  Plus,
+  X,
 } from 'lucide-react';
 import { Room, Idea } from '../types';
-import { getRoomIdeas, toggleIdeaStatus, shuffleRoom, getRoom } from '../services/roomService';
+import { getRoomIdeas, toggleIdeaStatus, shuffleRoom, getRoom, addIdea } from '../services/roomService';
 import { GoogleDocImportModal } from './GoogleDocImportModal';
 
 export interface HostDashboardProps {
@@ -37,6 +39,14 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
   const [isShuffling, setIsShuffling] = useState(false);
   const [toastFeedback, setToastFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Manual Add Idea State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newOneLiner, setNewOneLiner] = useState('');
+  const [newCategory, setNewCategory] = useState('General');
+  const [newProblem, setNewProblem] = useState('');
+  const [isSubmittingIdea, setIsSubmittingIdea] = useState(false);
 
   useEffect(() => {
     if (initialIdeas) {
@@ -107,6 +117,43 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
     }
   };
 
+  const handleAddIdeaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim() || !newOneLiner.trim()) return;
+
+    setIsSubmittingIdea(true);
+    try {
+      const added = await addIdea(room.id, {
+        title: newTitle.trim(),
+        oneLiner: newOneLiner.trim(),
+        category: newCategory.trim() || 'General',
+        problemStatement: newProblem.trim() || undefined,
+        status: 'pot',
+      });
+
+      setIdeas((prev) => [...prev, added]);
+      setNewTitle('');
+      setNewOneLiner('');
+      setNewCategory('General');
+      setNewProblem('');
+      setIsAddModalOpen(false);
+      setToastFeedback({
+        message: `Added "${added.title}" to the pot!`,
+        type: 'success',
+      });
+      setTimeout(() => setToastFeedback(null), 3000);
+    } catch (err: any) {
+      console.error('[HostDashboard] Failed to add idea:', err);
+      setToastFeedback({
+        message: err?.message || 'Failed to create idea',
+        type: 'error',
+      });
+      setTimeout(() => setToastFeedback(null), 3000);
+    } finally {
+      setIsSubmittingIdea(false);
+    }
+  };
+
   const potIdeas = ideas.filter((i) => i.status === 'pot');
   const activeIdeas = ideas.filter((i) => i.status === 'active');
   const archivedIdeas = ideas.filter((i) => i.status === 'archived');
@@ -137,30 +184,40 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
           )}
         </div>
 
-        {/* Room Code Badge */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 p-2 px-3 rounded-xl bg-card border border-jade/30">
+        {/* Room Actions & Code Badge */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-2 p-1.5 px-3 rounded-xl bg-card border border-jade/30">
             <div className="text-right">
               <div className="text-[10px] uppercase font-semibold text-mint/50">Room Code</div>
-              <div className="text-lg font-bold font-mono-tabular tracking-wider text-jade">
+              <div className="text-base font-bold font-mono-tabular tracking-wider text-jade">
                 {room.code}
               </div>
             </div>
             <button
               onClick={handleCopyCode}
               aria-label="Copy Room Code"
-              className="p-1.5 rounded-lg bg-well hover:bg-well/80 text-mint/80 hover:text-jade transition-colors"
+              className="p-1.5 rounded-lg bg-well hover:bg-well/80 text-mint/80 hover:text-jade transition-colors active:scale-95 cursor-pointer"
             >
               {copiedCode ? <Check className="w-4 h-4 text-jade" /> : <Copy className="w-4 h-4" />}
             </button>
           </div>
+
+          {/* Add Idea Button */}
+          <button
+            type="button"
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-card hover:bg-well border border-jade/40 hover:border-jade text-mint font-semibold text-sm transition-all active:scale-95 cursor-pointer shadow-sm"
+          >
+            <Plus className="w-4 h-4 text-jade" />
+            <span>Add Idea</span>
+          </button>
 
           {/* Shuffle Button */}
           <button
             onClick={handleShuffle}
             disabled={isShuffling}
             aria-label="Shuffle Pot / Start Round"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card hover:bg-well border border-jade/40 hover:border-jade text-mint-ivory hover:text-jade font-semibold transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-card hover:bg-well border border-jade/40 hover:border-jade text-mint-ivory hover:text-jade font-semibold transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 cursor-pointer"
           >
             {isShuffling ? (
               <Loader2 className="w-4 h-4 text-jade animate-spin" />
@@ -168,17 +225,17 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
               <Shuffle className="w-4 h-4 text-jade" />
             )}
             <span className="text-sm">
-              {isShuffling ? 'Shuffling...' : 'Shuffle Pot / Start Round'}
+              {isShuffling ? 'Shuffling...' : 'Shuffle Round'}
             </span>
           </button>
 
           {/* Sync Button */}
           <button
             onClick={() => (onOpenDocSync ? onOpenDocSync() : setIsDocModalOpen(true))}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-jade hover:bg-jade-focus text-obsidian font-semibold transition-all shadow-md"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-jade hover:bg-jade-focus text-obsidian font-bold transition-all shadow-jade-glow active:scale-95 cursor-pointer"
           >
             <RefreshCw className="w-4 h-4" />
-            <span className="text-sm">Sync Google Doc</span>
+            <span className="text-sm">Sync Doc</span>
           </button>
         </div>
       </div>
@@ -215,7 +272,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
           role="tab"
           aria-selected={activeTab === 'pot'}
           onClick={() => setActiveTab('pot')}
-          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl transition-all font-medium text-sm ${
+          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl transition-all font-medium text-sm active:scale-98 cursor-pointer ${
             activeTab === 'pot'
               ? 'bg-card border border-jade/40 text-mint-ivory shadow-sm'
               : 'text-mint/60 hover:text-mint hover:bg-card/40'
@@ -232,7 +289,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
           role="tab"
           aria-selected={activeTab === 'active'}
           onClick={() => setActiveTab('active')}
-          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl transition-all font-medium text-sm ${
+          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl transition-all font-medium text-sm active:scale-98 cursor-pointer ${
             activeTab === 'active'
               ? 'bg-card border border-jade/40 text-mint-ivory shadow-sm'
               : 'text-mint/60 hover:text-mint hover:bg-card/40'
@@ -249,7 +306,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
           role="tab"
           aria-selected={activeTab === 'archived'}
           onClick={() => setActiveTab('archived')}
-          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl transition-all font-medium text-sm ${
+          className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl transition-all font-medium text-sm active:scale-98 cursor-pointer ${
             activeTab === 'archived'
               ? 'bg-card border border-jade/40 text-mint-ivory shadow-sm'
               : 'text-mint/60 hover:text-mint hover:bg-card/40'
@@ -275,25 +332,36 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
             </h3>
             <p className="text-xs text-mint/60 max-w-sm mx-auto">
               {activeTab === 'pot'
-                ? 'Sync your Google Doc to populate new candidate ideas, or move archived ideas back into rotation.'
+                ? 'Add ideas manually with the button above, sync a Google Doc, or move archived ideas back into rotation.'
                 : activeTab === 'active'
                 ? 'Ideas currently being swiped on by raters in the King of the Hill arena appear here.'
                 : 'Ideas you drop or archive will be kept here safely for future retrieval.'}
             </p>
             {activeTab === 'pot' && (
-              <button
-                onClick={() => (onOpenDocSync ? onOpenDocSync() : setIsDocModalOpen(true))}
-                className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-well hover:bg-well/80 border border-jade/30 text-xs text-jade font-medium transition-colors"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Import Ideas via Google Doc</span>
-              </button>
+              <div className="flex items-center justify-center gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-jade hover:bg-jade-focus text-obsidian text-xs font-bold transition-all shadow-jade-glow active:scale-95 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add First Idea</span>
+                </button>
+                <button
+                  onClick={() => (onOpenDocSync ? onOpenDocSync() : setIsDocModalOpen(true))}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-well hover:bg-well/80 border border-jade/30 text-xs text-jade font-medium transition-colors active:scale-95 cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Import via Google Doc</span>
+                </button>
+              </div>
             )}
           </div>
         ) : (
           currentTabIdeas.map((idea) => {
             // Strip code prefix from title if present
             const cleanTitle = idea.title.replace(/^[A-Za-z0-9]+-\d+:\s*/, '');
+            const formattedScore = idea.score <= 1 ? Math.round(idea.score * 100) : Math.round(idea.score);
 
             return (
               <div
@@ -311,7 +379,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
                       </span>
                       {idea.score > 0 && (
                         <span className="text-xs font-mono-tabular text-mint/60">
-                          Score: <strong className="text-mint">{idea.score}%</strong> ({idea.likesCount}L / {idea.passesCount}P)
+                          Score: <strong className="text-mint">{formattedScore}%</strong> ({idea.likesCount}L / {idea.passesCount}P)
                         </span>
                       )}
                     </div>
@@ -326,7 +394,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
                       <button
                         onClick={() => handleToggleIdeaStatus(idea.id, 'archived')}
                         aria-label={`Archive ${cleanTitle}`}
-                        className="px-3 py-1.5 rounded-lg bg-well hover:bg-rose/10 border border-jade/20 hover:border-rose/30 text-xs text-mint/70 hover:text-rose transition-colors"
+                        className="px-3 py-1.5 rounded-lg bg-well hover:bg-rose/10 border border-jade/20 hover:border-rose/30 text-xs text-mint/70 hover:text-rose transition-colors active:scale-95 cursor-pointer"
                       >
                         Archive
                       </button>
@@ -336,7 +404,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
                       <button
                         onClick={() => handleToggleIdeaStatus(idea.id, 'pot')}
                         aria-label={`Move ${cleanTitle} to Pot`}
-                        className="px-3 py-1.5 rounded-lg bg-well hover:bg-jade/10 border border-jade/30 hover:border-jade text-xs text-jade font-medium transition-colors"
+                        className="px-3 py-1.5 rounded-lg bg-well hover:bg-jade/10 border border-jade/30 hover:border-jade text-xs text-jade font-medium transition-colors active:scale-95 cursor-pointer"
                       >
                         Move to Pot
                       </button>
@@ -364,6 +432,116 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
           })
         )}
       </div>
+
+      {/* Manual Add Idea Modal */}
+      {isAddModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-idea-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-obsidian/80 backdrop-blur-sm animate-fadeIn"
+        >
+          <div className="w-full max-w-lg bg-surface border border-jade/40 rounded-2xl shadow-jade-glow p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-jade/20 pb-3">
+              <h3 id="add-idea-modal-title" className="text-lg font-bold text-mint-ivory flex items-center gap-2">
+                <Plus className="w-5 h-5 text-jade" />
+                <span>Add Idea to Pot</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-well text-mint/60 hover:text-mint transition-colors active:scale-95 cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddIdeaSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="idea-title" className="block text-xs font-medium text-mint/80 mb-1">
+                  Title *
+                </label>
+                <input
+                  id="idea-title"
+                  type="text"
+                  required
+                  placeholder="e.g. AI-Powered Calendar Shuffler"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-card border border-jade/30 text-sm text-mint-ivory placeholder-mint/30 focus:border-jade focus:outline-none focus:ring-1 focus:ring-jade/40"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="idea-oneliner" className="block text-xs font-medium text-mint/80 mb-1">
+                  One-Liner *
+                </label>
+                <textarea
+                  id="idea-oneliner"
+                  required
+                  rows={2}
+                  placeholder="Crisp single sentence describing the concept..."
+                  value={newOneLiner}
+                  onChange={(e) => setNewOneLiner(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-card border border-jade/30 text-sm text-mint-ivory placeholder-mint/30 focus:border-jade focus:outline-none focus:ring-1 focus:ring-jade/40"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="idea-category" className="block text-xs font-medium text-mint/80 mb-1">
+                    Category
+                  </label>
+                  <input
+                    id="idea-category"
+                    type="text"
+                    placeholder="General, Tech, Growth..."
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl bg-card border border-jade/30 text-sm text-mint-ivory placeholder-mint/30 focus:border-jade focus:outline-none focus:ring-1 focus:ring-jade/40"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="idea-problem" className="block text-xs font-medium text-mint/80 mb-1">
+                    Problem (Optional)
+                  </label>
+                  <input
+                    id="idea-problem"
+                    type="text"
+                    placeholder="Why does this matter?"
+                    value={newProblem}
+                    onChange={(e) => setNewProblem(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl bg-card border border-jade/30 text-sm text-mint-ivory placeholder-mint/30 focus:border-jade focus:outline-none focus:ring-1 focus:ring-jade/40"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-jade/20">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-well text-mint/70 hover:text-mint text-xs font-medium transition-colors active:scale-95 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingIdea || !newTitle.trim() || !newOneLiner.trim()}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-jade hover:bg-jade-focus disabled:opacity-50 text-obsidian text-xs font-bold transition-all shadow-jade-glow active:scale-95 cursor-pointer"
+                >
+                  {isSubmittingIdea ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                  <span>Add Idea</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Embedded Google Doc Import Modal */}
       <GoogleDocImportModal

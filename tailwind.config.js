@@ -8,7 +8,10 @@ export default {
     extend: {
       colors: {
         obsidian: '#030705',
-        surface: '#06120d',
+        surface: {
+          DEFAULT: '#06120d',
+          elevated: '#081711',
+        },
         card: '#0c2018',
         well: '#122c22',
         jade: {

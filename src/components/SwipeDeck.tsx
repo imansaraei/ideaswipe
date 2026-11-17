@@ -3,7 +3,7 @@ import { Idea } from '../types';
 import { SwipeDirection } from '../hooks/useSwipeGesture';
 import { SwipeCard } from './SwipeCard';
 import { recordSwipe } from '../services/roomService';
-import { CheckCircle2, Sparkles, ArrowRight, Layers } from 'lucide-react';
+import { CheckCircle2, Sparkles, ArrowRight, Layers, RotateCcw } from 'lucide-react';
 
 export { recordSwipe };
 
@@ -14,13 +14,15 @@ export interface SwipeDeckProps {
   onFinish?: () => void;
   roomId?: string;
   userId?: string;
+  isHost?: boolean;
+  onAddIdeas?: () => void;
   className?: string;
 }
 
 /**
- * 60fps Stack of active idea cards with swipe gestures,
- * progress counter badge ("Card 1 of 3" with monospace tabular numbers),
- * and round completion screen.
+ * 60fps Stack of active idea cards with fluid Apple-style interaction physics,
+ * continuous background layer depth interpolation, progress counter badge,
+ * undo support, and round completion screen.
  */
 export const SwipeDeck: React.FC<SwipeDeckProps> = ({
   ideas = [],
@@ -29,9 +31,13 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
   onFinish,
   roomId,
   userId,
+  isHost = false,
+  onAddIdeas,
   className = '',
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [topCardProgress, setTopCardProgress] = useState(0);
+  const [swipeHistory, setSwipeHistory] = useState<{ ideaId: string; direction: SwipeDirection }[]>([]);
 
   const swipedSet = useMemo(() => {
     if (!swipedIdeaIds) return null;
@@ -45,6 +51,8 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
   useEffect(() => {
     initialSwipedSnapshot.current = null;
     setCurrentIndex(0);
+    setTopCardProgress(0);
+    setSwipeHistory([]);
   }, [ideasKey]);
 
   if (initialSwipedSnapshot.current === null && swipedSet !== null) {
@@ -67,6 +75,9 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
 
   const handleCardSwipe = useCallback(
     (ideaId: string, direction: SwipeDirection) => {
+      setSwipeHistory((prev) => [...prev, { ideaId, direction }]);
+      setTopCardProgress(0);
+
       // Optimistically advance card immediately so 60fps gesture transition is seamless
       setCurrentIndex((prev) => {
         const nextIndex = prev + 1;
@@ -93,20 +104,38 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
     [roomId, userId, onSwipe, totalCards, onFinish]
   );
 
+  const handleUndo = useCallback(() => {
+    if (currentIndex <= 0 || swipeHistory.length === 0) return;
+    setSwipeHistory((prev) => prev.slice(0, -1));
+    setCurrentIndex((prev) => Math.max(0, prev - 1));
+    setTopCardProgress(0);
+  }, [currentIndex, swipeHistory.length]);
+
   // Empty state
   if (isEmpty) {
     return (
       <div
         data-testid="swipe-deck-empty"
-        className={`flex flex-col items-center justify-center p-8 rounded-2xl border border-emerald-900/40 bg-surface text-center max-w-md mx-auto ${className}`}
+        className={`flex flex-col items-center justify-center p-8 rounded-2xl border border-jade/20 bg-surface text-center max-w-md mx-auto ${className}`}
       >
-        <div className="w-12 h-12 rounded-full bg-emerald-950 flex items-center justify-center text-emerald-400 mb-4 border border-emerald-800/40">
+        <div className="w-12 h-12 rounded-full bg-well flex items-center justify-center text-jade mb-4 border border-jade/30 shadow-jade-glow">
           <Layers className="w-6 h-6 text-jade" />
         </div>
         <h3 className="text-lg font-bold text-mint-ivory mb-2">No Active Ideas</h3>
-        <p className="text-sm text-mint/70 max-w-xs">
+        <p className="text-sm text-mint/70 max-w-xs mb-4">
           There are no cards in the current round. Check back when the host triggers the next shuffle!
         </p>
+        {(isHost || onAddIdeas) && (
+          <button
+            type="button"
+            data-testid="swipe-deck-add-ideas"
+            onClick={onAddIdeas}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-jade hover:bg-jade-focus text-obsidian font-bold text-xs tracking-wide shadow-jade-glow transition-all active:scale-95 cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Add Ideas to Pot</span>
+          </button>
+        )}
       </div>
     );
   }
@@ -118,7 +147,7 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
         data-testid="swipe-deck-completion"
         className={`flex flex-col items-center justify-center p-8 rounded-2xl border border-jade/40 bg-gradient-to-b from-[#0c2018] to-[#040e0a] text-center max-w-md mx-auto shadow-jade-glow ${className}`}
       >
-        <div className="w-16 h-16 rounded-full bg-emerald-950 flex items-center justify-center text-jade mb-4 border border-emerald-800/60 shadow-jade-glow">
+        <div className="w-16 h-16 rounded-full bg-well flex items-center justify-center text-jade mb-4 border border-jade/40 shadow-jade-glow">
           <CheckCircle2 className="w-8 h-8" />
         </div>
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-jade/10 text-jade text-xs font-semibold uppercase tracking-wider mb-2 border border-jade/30">
@@ -132,17 +161,30 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
           You voted on all <span className="font-mono-tabular font-bold text-mint-ivory">{ideas.length}</span> ideas in this round. See how they stack up on the King of the Hill leaderboard!
         </p>
 
-        {onFinish && (
-          <button
-            type="button"
-            data-testid="swipe-deck-finish-button"
-            onClick={onFinish}
-            className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-jade hover:bg-emerald-400 text-obsidian font-bold text-sm tracking-wide shadow-jade-glow transition-all active:scale-98 cursor-pointer"
-          >
-            <span>View Leaderboard</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        )}
+        <div className="w-full flex flex-col gap-2.5">
+          {onFinish && (
+            <button
+              type="button"
+              data-testid="swipe-deck-finish-button"
+              onClick={onFinish}
+              className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-jade hover:bg-jade-focus text-obsidian font-bold text-sm tracking-wide shadow-jade-glow transition-all active:scale-95 cursor-pointer"
+            >
+              <span>View Leaderboard</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          )}
+
+          {swipeHistory.length > 0 && (
+            <button
+              type="button"
+              onClick={handleUndo}
+              className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-surface hover:bg-well border border-jade/20 hover:border-jade/40 text-mint/80 hover:text-mint font-medium text-xs transition-all active:scale-95 cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-jade" />
+              <span>Undo Last Vote</span>
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -157,21 +199,37 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
       data-testid="swipe-deck"
       className={`w-full max-w-md mx-auto flex flex-col items-center ${className}`}
     >
-      {/* Top Bar: Progress and Monospace Counter Badge */}
+      {/* Top Bar: Progress, Monospace Counter Badge, and Undo */}
       <div className="w-full flex items-center justify-between mb-4 px-2">
-        <div
-          data-testid="swipe-counter-badge"
-          className="inline-flex items-center gap-1 text-xs text-mint/80 bg-surface/90 px-3 py-1.5 rounded-full border border-emerald-900/40"
-        >
-          <span>Card</span>
-          <span className="font-mono-tabular font-bold text-mint-ivory">{currentCardNumber}</span>
-          <span className="text-mint/50">of</span>
-          <span className="font-mono-tabular font-bold text-mint-ivory">{totalCards}</span>
+        <div className="flex items-center gap-2">
+          <div
+            data-testid="swipe-counter-badge"
+            className="inline-flex items-center gap-1 text-xs text-mint/80 bg-surface/90 px-3 py-1.5 rounded-full border border-jade/20"
+          >
+            <span>Card</span>
+            <span className="font-mono-tabular font-bold text-mint-ivory">{currentCardNumber}</span>
+            <span className="text-mint/50">of</span>
+            <span className="font-mono-tabular font-bold text-mint-ivory">{totalCards}</span>
+          </div>
+
+          {currentIndex > 0 && swipeHistory.length > 0 && (
+            <button
+              type="button"
+              data-testid="swipe-undo-button"
+              onClick={handleUndo}
+              aria-label="Undo previous swipe"
+              className="inline-flex items-center gap-1 text-xs text-mint/70 hover:text-jade bg-surface px-2.5 py-1.5 rounded-full border border-jade/20 hover:border-jade/40 transition-all active:scale-95 cursor-pointer"
+              title="Undo last swipe"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Undo</span>
+            </button>
+          )}
         </div>
 
         {/* Mini progress percentage */}
         <div className="flex items-center gap-2">
-          <div className="w-24 h-1.5 rounded-full bg-obsidian border border-emerald-950 overflow-hidden">
+          <div className="w-24 h-1.5 rounded-full bg-obsidian border border-jade/20 overflow-hidden">
             <div
               className="h-full bg-jade transition-all duration-300"
               style={{ width: `${progressPercent}%` }}
@@ -197,16 +255,24 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
             };
 
             if (!isTop) {
-              const scale = 1 - stackDepth * 0.04;
-              const translateY = stackDepth * 12;
-              const opacity = 1 - stackDepth * 0.25;
+              // Interpolate physical scaling & translation dynamically with top card drag
+              const dragFactor = topCardProgress;
+              const baseTranslateY = stackDepth * 12;
+              const interpolatedTranslateY = baseTranslateY - dragFactor * 12;
+
+              const baseScale = 1 - stackDepth * 0.04;
+              const interpolatedScale = baseScale + dragFactor * 0.04;
+
+              const baseOpacity = 1 - stackDepth * 0.25;
+              const interpolatedOpacity = Math.min(1, baseOpacity + dragFactor * 0.25);
 
               stackStyle = {
                 ...stackStyle,
-                transform: `translate3d(0, ${translateY}px, 0) scale(${scale})`,
-                opacity,
+                transform: `translate3d(0, ${interpolatedTranslateY}px, 0) scale(${interpolatedScale})`,
+                opacity: interpolatedOpacity,
                 zIndex: 10 - stackDepth,
                 pointerEvents: 'none',
+                transition: dragFactor === 0 ? 'transform 200ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease' : 'none',
               };
             } else {
               stackStyle = {
@@ -220,6 +286,7 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
                 key={idea.id}
                 idea={idea}
                 isTopCard={isTop}
+                onDragProgress={isTop ? (progress) => setTopCardProgress(progress) : undefined}
                 onSwipe={(direction) => handleCardSwipe(idea.id, direction)}
                 style={stackStyle}
               />

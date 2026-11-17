@@ -337,6 +337,63 @@ export async function toggleIdeaStatus(
   }
 }
 
+export interface CreateIdeaInput {
+  title: string;
+  oneLiner: string;
+  category?: string;
+  problemStatement?: string;
+  targetAudience?: string;
+  status?: 'pot' | 'active' | 'archived';
+}
+
+/**
+ * Creates and appends a single idea directly into a room.
+ */
+export async function addIdea(
+  roomId: string,
+  input: CreateIdeaInput
+): Promise<Idea> {
+  if (!roomId) throw new Error('roomId is required');
+  if (!input.title?.trim()) throw new Error('Idea title is required');
+
+  const ideas = await getRoomIdeas(roomId);
+  const nextNum = ideas.length + 1;
+  const code = `I-${String(nextNum).padStart(3, '0')}`;
+  const id = `idea_${code.toLowerCase()}_${Date.now()}`;
+
+  const newIdea: Idea = {
+    id,
+    code,
+    title: input.title.trim(),
+    oneLiner: input.oneLiner?.trim() || input.title.trim(),
+    category: input.category?.trim() || 'General',
+    problemStatement: input.problemStatement?.trim() || undefined,
+    targetAudience: input.targetAudience?.trim() || undefined,
+    status: input.status || 'pot',
+    likesCount: 0,
+    passesCount: 0,
+    score: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  if (isFirebaseConfigured && db) {
+    try {
+      const ideaRef = doc(db, 'rooms', roomId, 'ideas', id);
+      await setDoc(ideaRef, newIdea);
+      notifyRoomUpdated(roomId);
+      return newIdea;
+    } catch (err) {
+      console.warn('[RoomService] Firebase addIdea failed, falling back to mock store:', err);
+    }
+  }
+
+  const existing = mockIdeasByRoom.get(roomId) || [];
+  mockIdeasByRoom.set(roomId, [...existing, newIdea]);
+  notifyRoomUpdated(roomId);
+  return newIdea;
+}
+
 /**
  * Records a user swipe (like or pass) on an idea.
  * Atomically creates a swipe document and increments the idea's vote counter.
