@@ -131,7 +131,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({
         status: 'pot',
       });
 
-      setIdeas((prev) => [...prev, added]);
+      setIdeas((prev) => (prev.some((i) => i.id === added.id) ? prev : [...prev, added]));
       setNewTitle('');
       setNewOneLiner('');
       setNewCategory('General');

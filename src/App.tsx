@@ -174,13 +174,7 @@ export const App: React.FC = () => {
 
   const voterId = user?.uid || getGuestId();
 
-  const isHost = Boolean(
-    currentRoom &&
-      currentRoom.hostUserId &&
-      (voterId === currentRoom.hostUserId ||
-        currentRoom.hostUserId === 'anonymous_host' ||
-        currentRoom.hostUserId === 'host_user')
-  );
+  const isHost = Boolean(currentRoom?.hostUserId && voterId === currentRoom.hostUserId);
 
   return (
     <div className="min-h-screen bg-obsidian text-mint flex flex-col items-center justify-between p-4 selection:bg-jade/30">
@@ -242,7 +236,7 @@ export const App: React.FC = () => {
           </button>
 
           {/* User Auth / Profile Button */}
-          {user ? (
+          {user && !user.isAnonymous ? (
             <div className="flex items-center gap-1.5">
               <button
                 type="button"

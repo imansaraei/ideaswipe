@@ -394,6 +394,18 @@ describe('SwipeDeck Component', () => {
     fireEvent.click(finishBtn);
     expect(onFinish).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps position when the same batch arrives re-ordered mid-round', async () => {
+    const ideas = sampleIdeas.slice(0, 2);
+    const { rerender } = render(React.createElement(SwipeDeck, { ideas }));
+    fireEvent.click(screen.getByTestId('swipe-like-button'));
+    await waitFor(() => {
+      expect(screen.getByTestId('swipe-counter-badge').textContent).toContain('Card2of2');
+    }, { timeout: 3000 });
+    rerender(React.createElement(SwipeDeck, { ideas: [...ideas].reverse() }));
+    expect(screen.getByTestId('swipe-counter-badge').textContent).toContain('Card2of2');
+    expect(screen.getByText(ideas[1].title)).toBeDefined();
+  });
 });
 
 describe('recordSwipe Helper (Offline / Mock Fallback)', () => {
@@ -597,3 +609,4 @@ describe('recordSwipe Helper (Offline / Mock Fallback)', () => {
     expect(screen.getByText('Third')).toBeDefined();
   });
 });
+

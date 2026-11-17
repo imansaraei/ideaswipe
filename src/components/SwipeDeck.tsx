@@ -46,7 +46,12 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
 
   // Snapshot initial swiped set so reactive background swipe updates do not double-advance currentIndex
   const initialSwipedSnapshot = useRef<Set<string> | null>(null);
-  const ideasKey = useMemo(() => ideas.map((i) => i.id).join(','), [ideas]);
+  // Order-independent key: vote counts can re-rank the batch mid-round, which must not reset the deck.
+  const ideasKey = useMemo(() => ideas.map((i) => i.id).sort().join(','), [ideas]);
+  const roundOrder = useRef<{ key: string; ids: string[] } | null>(null);
+  if (roundOrder.current?.key !== ideasKey) {
+    roundOrder.current = { key: ideasKey, ids: ideas.map((i) => i.id) };
+  }
 
   useEffect(() => {
     initialSwipedSnapshot.current = null;
@@ -61,8 +66,10 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({
 
   const effectiveIdeas = useMemo(() => {
     const filterSet = initialSwipedSnapshot.current;
-    if (!filterSet || filterSet.size === 0) return ideas;
-    return ideas.filter((idea) => !filterSet.has(idea.id));
+    const byId = new Map(ideas.map((i) => [i.id, i]));
+    const ordered = roundOrder.current!.ids.map((id) => byId.get(id)!).filter(Boolean);
+    if (!filterSet || filterSet.size === 0) return ordered;
+    return ordered.filter((idea) => !filterSet.has(idea.id));
   }, [ideas, ideasKey]);
 
   const isRoundAlreadyCompleted =

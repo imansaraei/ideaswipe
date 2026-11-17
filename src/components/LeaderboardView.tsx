@@ -156,8 +156,8 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
         ) : (
           rankedChampions.map((idea, index) => {
             const rank = index + 1;
-            const isCrown = rank === 1;
             const likes = idea.likesCount || 0;
+            const isCrown = rank === 1 && likes > 0;
             const passes = idea.passesCount || 0;
             const total = likes + passes;
             const percent = total > 0 ? Math.round((likes / total) * 100) : Math.round((idea.score || 0) * 100);

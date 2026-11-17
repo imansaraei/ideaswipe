@@ -7,7 +7,7 @@ import {
   getRoomSwipes,
   subscribeToRoomUpdates,
 } from '../services/roomService';
-import { rankLeaderboardIdeas, pickNextChallengers } from '../lib/leaderboard';
+import { rankLeaderboardIdeas } from '../lib/leaderboard';
 import { db, isFirebaseConfigured } from '../services/firebase';
 
 export interface UseRoomDataResult {
@@ -194,7 +194,10 @@ export function useRoomData(
     const pot = ideas.filter(
       (idea) => idea.status === 'pot' || (!idea.status && idea.status !== 'archived')
     );
-    return pickNextChallengers(pot, effectiveLimit);
+    // Stable pick (oldest first): vote counts must not change which ideas are in the round.
+    return [...pot]
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || a.id.localeCompare(b.id))
+      .slice(0, effectiveLimit);
   }, [ideas, room?.activeIdeaIds, effectiveLimit]);
 
   const swipedIdeaIds = useMemo(() => {

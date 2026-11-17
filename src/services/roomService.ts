@@ -106,10 +106,15 @@ export async function createRoom(
   if (isFirebaseConfigured && db) {
     try {
       const roomRef = doc(db, 'rooms', id);
-      await setDoc(roomRef, room);
+      await Promise.race([
+        setDoc(roomRef, room),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
+      ]);
       return room;
     } catch (err) {
-      console.warn('[RoomService] Firebase save failed, falling back to mock store:', err);
+      // A room saved only in this browser can't be joined by anyone else, so fail loudly.
+      console.warn('[RoomService] Firebase createRoom failed:', err);
+      throw new Error("Couldn't create the room. Check your connection and try again.");
     }
   }
 
@@ -238,13 +243,10 @@ export async function syncGoogleDoc(
       existingSnap.docs.forEach((d) => {
         const data = d.data() as Idea;
         existingMap.set(data.id, data);
-        if (data.code) {
-          existingMap.set(data.code.toUpperCase(), data);
-        }
       });
 
       for (const idea of parsedIdeas) {
-        const prev = existingMap.get(idea.id) || (idea.code ? existingMap.get(idea.code.toUpperCase()) : undefined);
+        const prev = existingMap.get(idea.id);
         const mergedIdea: Idea = prev
           ? {
               ...idea,
@@ -270,18 +272,15 @@ export async function syncGoogleDoc(
     room.googleDoc = googleDocConfig;
   }
 
-  // Merge ideas: keep existing score/likes/passes if idea code or id already exists
+  // Merge ideas by id only: a manually added idea can share a code with a doc idea.
   const existing = mockIdeasByRoom.get(roomId) || [];
   const existingMap = new Map<string, Idea>();
   existing.forEach((i) => {
     existingMap.set(i.id, i);
-    if (i.code) {
-      existingMap.set(i.code.toUpperCase(), i);
-    }
   });
 
   const merged = parsedIdeas.map((newIdea) => {
-    const prev = existingMap.get(newIdea.id) || (newIdea.code ? existingMap.get(newIdea.code.toUpperCase()) : undefined);
+    const prev = existingMap.get(newIdea.id);
     if (prev) {
       return {
         ...newIdea,
@@ -295,10 +294,9 @@ export async function syncGoogleDoc(
   });
 
   // Retain any existing ideas that weren't in the incoming doc
-  const incomingCodes = new Set(parsedIdeas.map((i) => i.code.toUpperCase()));
   const incomingIds = new Set(parsedIdeas.map((i) => i.id));
   for (const prev of existing) {
-    if (!incomingCodes.has(prev.code.toUpperCase()) && !incomingIds.has(prev.id)) {
+    if (!incomingIds.has(prev.id)) {
       merged.push(prev);
     }
   }

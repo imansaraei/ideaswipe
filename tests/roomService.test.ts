@@ -591,3 +591,19 @@ describe('removeSwipe (Undo)', () => {
     expect(after.passesCount).toBe(1);
   });
 });
+
+describe('syncGoogleDoc code collisions', () => {
+  beforeEach(() => resetMockRoomStoreForTesting());
+
+  it('does not copy votes from a manual idea that shares a code with a doc idea', async () => {
+    const room = await createRoom('host_sync', 'Sync Collision');
+    const manual = await addIdea(room.id, { title: 'Manual', oneLiner: 'x' });
+    await recordSwipe(room.id, 'u1', manual.id, 'like');
+    await syncGoogleDoc(room.id, 'doc123', GOOGLE_DOC_MARKDOWN_TEMPLATE);
+    const ideas = await getRoomIdeas(room.id);
+    const fromDoc = ideas.find((i) => i.id !== manual.id)!;
+    expect(ideas).toHaveLength(2);
+    expect(fromDoc.likesCount).toBe(0);
+    expect(ideas.find((i) => i.id === manual.id)!.likesCount).toBe(1);
+  });
+});

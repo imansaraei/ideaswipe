@@ -3,6 +3,9 @@ import {
   signInWithPopup,
   signOut as fbSignOut,
   onAuthStateChanged,
+  signInAnonymously,
+  linkWithPopup,
+  signInWithCredential,
   type User,
 } from 'firebase/auth';
 import { auth, isFirebaseConfigured } from './firebase';
@@ -73,6 +76,18 @@ export function createMockUser(params: {
 export async function signInWithGoogle(): Promise<User> {
   if (isFirebaseConfigured && auth) {
     const provider = new GoogleAuthProvider();
+    if (auth.currentUser?.isAnonymous) {
+      // Keep the guest's uid so rooms they host and votes they cast stay theirs.
+      try {
+        return (await linkWithPopup(auth.currentUser, provider)).user;
+      } catch (err: any) {
+        const credential = GoogleAuthProvider.credentialFromError(err);
+        if (err?.code === 'auth/credential-already-in-use' && credential) {
+          return (await signInWithCredential(auth, credential)).user;
+        }
+        throw err;
+      }
+    }
     const result = await signInWithPopup(auth, provider);
     return result.user;
   }
@@ -152,6 +167,11 @@ export function onAuthStateChange(callback: (user: User | null) => void): () => 
     unsubscribeFirebase = onAuthStateChanged(auth, (fbUser) => {
       if (fbUser) {
         notifySubscribers(fbUser);
+      } else {
+        // Guests get an anonymous Firebase account so security rules can tell voters apart.
+        signInAnonymously(auth!).catch((err) =>
+          console.warn('[Auth] Anonymous sign-in failed:', err)
+        );
       }
     });
   }
